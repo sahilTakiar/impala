@@ -276,6 +276,7 @@ Status BlockingJoinNode::GetFirstProbeRow(RuntimeState* state) {
 template <bool ASYNC_BUILD>
 Status BlockingJoinNode::SendBuildInputToSink(RuntimeState* state,
     DataSink* build_sink) {
+  SetOpenStartTime(state);
   {
     SCOPED_TIMER(build_timer_);
     RETURN_IF_ERROR(build_sink->Open(state));
@@ -304,6 +305,7 @@ Status BlockingJoinNode::SendBuildInputToSink(RuntimeState* state,
     SCOPED_TIMER(build_timer_);
     RETURN_IF_ERROR(build_sink->FlushFinal(state));
   }
+  SetOpenEndTime(state);
   return Status::OK();
 }
 

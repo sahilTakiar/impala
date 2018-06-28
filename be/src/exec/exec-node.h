@@ -30,8 +30,10 @@
 #include "runtime/bufferpool/reservation-tracker.h"
 #include "runtime/descriptors.h" // for RowDescriptor
 #include "runtime/reservation-manager.h"
+#include "runtime/runtime-state.h"
 #include "util/blocking-queue.h"
 #include "util/runtime-profile.h"
+#include "util/runtime-profile-counters.h"
 
 namespace impala {
 
@@ -277,6 +279,16 @@ class ExecNode {
   TPlanNodeType::type type_;
   ObjectPool* pool_;
 
+  std::vector<TPipelineMembership> pipes_;
+
+  bool has_getnext_pipe_ = false;
+  bool has_open_pipe_ = false;
+
+  RuntimeProfile::Counter* getnext_start_time_ = nullptr;
+  RuntimeProfile::Counter* open_start_time_ = nullptr;
+  RuntimeProfile::Counter* getnext_end_time_ = nullptr;
+  RuntimeProfile::Counter* open_end_time_ = nullptr;
+
   /// Conjuncts and their evaluators in this node. 'conjuncts_' live in the
   /// query-state's object pool while the evaluators live in this exec node's
   /// object pool.
@@ -328,6 +340,38 @@ class ExecNode {
 
   /// If true, codegen should be disabled for this exec node.
   const bool disable_codegen_;
+
+  void SetGetNextStartTime(RuntimeState* state) {
+    if (!has_getnext_pipe_ || getnext_start_time_ != nullptr) return;
+    getnext_start_time_ = ADD_COUNTER(runtime_profile_, "GetNextStartTime", TUnit::TIME_US);
+    int64_t start;
+    state->utc_timestamp()->UtcToUnixTimeMicros(&start);
+    COUNTER_SET(getnext_start_time_, GetCurrentTimeMicros() - start);
+  }
+
+  void SetOpenStartTime(RuntimeState* state) {
+    if (!has_open_pipe_ || open_start_time_ != nullptr) return;
+    open_start_time_ = ADD_COUNTER(runtime_profile_, "OpenStartTime", TUnit::TIME_US);
+    int64_t start;
+    state->utc_timestamp()->UtcToUnixTimeMicros(&start);
+    COUNTER_SET(open_start_time_, GetCurrentTimeMicros() - start);
+  }
+
+  void SetGetNextEndTime(RuntimeState* state) {
+    if (!has_getnext_pipe_ || getnext_end_time_ != nullptr) return;
+    getnext_end_time_ = ADD_COUNTER(runtime_profile_, "GetNextEndTime", TUnit::TIME_US);
+    int64_t start;
+    state->utc_timestamp()->UtcToUnixTimeMicros(&start);
+    COUNTER_SET(getnext_end_time_, GetCurrentTimeMicros() - start);
+  }
+
+  void SetOpenEndTime(RuntimeState* state) {
+    if (!has_open_pipe_ || open_end_time_ != nullptr) return;
+    open_end_time_ = ADD_COUNTER(runtime_profile_, "OpenEndTime", TUnit::TIME_US);
+    int64_t start;
+    state->utc_timestamp()->UtcToUnixTimeMicros(&start);
+    COUNTER_SET(open_end_time_, GetCurrentTimeMicros() - start);
+  }
 
   /// Create a single exec node derived from thrift node; place exec node in 'pool'.
   static Status CreateNode(ObjectPool* pool, const TPlanNode& tnode,

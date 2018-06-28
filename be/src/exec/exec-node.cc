@@ -111,6 +111,7 @@ ExecNode::ExecNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl
   : id_(tnode.node_id),
     type_(tnode.node_type),
     pool_(pool),
+    pipes_(tnode.pipelines),
     row_descriptor_(descs, tnode.row_tuples, tnode.nullable_tuples),
     resource_profile_(tnode.resource_profile),
     limit_(tnode.limit),
@@ -124,6 +125,13 @@ ExecNode::ExecNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl
     is_closed_(false) {
   runtime_profile_->set_metadata(id_);
   debug_options_.phase = TExecNodePhase::INVALID;
+  for (const auto& pipe : pipes_) {
+    if (pipe.phase == TExecNodePhase::GETNEXT) has_getnext_pipe_ = true;
+    if (pipe.phase == TExecNodePhase::OPEN) has_open_pipe_ = true;
+    runtime_profile_->AddInfoString(
+        Substitute("Pipe$0", _TExecNodePhase_VALUES_TO_NAMES.find(pipe.phase)->second),
+        Substitute("$0", pipe.pipe_id));
+  }
 }
 
 ExecNode::~ExecNode() {

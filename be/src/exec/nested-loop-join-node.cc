@@ -198,6 +198,7 @@ Status NestedLoopJoinNode::GetNext(RuntimeState* state, RowBatch* output_batch,
     bool* eos) {
   DCHECK(!output_batch->AtCapacity());
   SCOPED_TIMER(runtime_profile_->total_time_counter());
+  SetGetNextStartTime(state);
   RETURN_IF_ERROR(ExecDebugAction(TExecNodePhase::GETNEXT, state));
   RETURN_IF_CANCELLED(state);
   RETURN_IF_ERROR(QueryMaintenance(state));
@@ -251,6 +252,7 @@ end:
     *eos = true;
     probe_batch_->TransferResourceOwnership(output_batch);
     build_batches_->TransferResourceOwnership(output_batch);
+    SetGetNextEndTime(state);
   }
   return Status::OK();
 }

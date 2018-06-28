@@ -488,6 +488,7 @@ int PartitionedHashJoinNode::ProcessProbeBatch(
 Status PartitionedHashJoinNode::GetNext(RuntimeState* state, RowBatch* out_batch,
     bool* eos) {
   SCOPED_TIMER(runtime_profile_->total_time_counter());
+  SetGetNextStartTime(state);
   RETURN_IF_ERROR(ExecDebugAction(TExecNodePhase::GETNEXT, state));
   DCHECK(!out_batch->AtCapacity());
 
@@ -639,6 +640,7 @@ Status PartitionedHashJoinNode::GetNext(RuntimeState* state, RowBatch* out_batch
 
   num_rows_returned_ += num_rows_added;
   COUNTER_SET(rows_returned_counter_, num_rows_returned_);
+  if (*eos) SetGetNextEndTime(state);
   return Status::OK();
 }
 

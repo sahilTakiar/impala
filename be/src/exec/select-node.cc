@@ -84,6 +84,7 @@ Status SelectNode::Open(RuntimeState* state) {
 
 Status SelectNode::GetNext(RuntimeState* state, RowBatch* row_batch, bool* eos) {
   SCOPED_TIMER(runtime_profile_->total_time_counter());
+  SetGetNextStartTime(state);
   RETURN_IF_ERROR(ExecDebugAction(TExecNodePhase::GETNEXT, state));
   // start (or continue) consuming row batches from child
   do {
@@ -108,6 +109,7 @@ Status SelectNode::GetNext(RuntimeState* state, RowBatch* row_batch, bool* eos) 
       child_row_batch_->Reset();
     }
   } while (!*eos && !row_batch->AtCapacity());
+  if (*eos) SetGetNextEndTime(state);
   return Status::OK();
 }
 

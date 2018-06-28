@@ -157,15 +157,21 @@ Status ExchangeNode::FillInputRowBatch(RuntimeState* state) {
 Status ExchangeNode::GetNext(RuntimeState* state, RowBatch* output_batch, bool* eos) {
   RETURN_IF_ERROR(ExecDebugAction(TExecNodePhase::GETNEXT, state));
   SCOPED_TIMER(runtime_profile_->total_time_counter());
+  SetGetNextStartTime(state);
   if (ReachedLimit()) {
     stream_recvr_->TransferAllResources(output_batch);
+    SetGetNextEndTime(state);
     *eos = true;
     return Status::OK();
   } else {
     *eos = false;
   }
 
-  if (is_merging_) return GetNextMerging(state, output_batch, eos);
+  if (is_merging_) {
+    RETURN_IF_ERROR(GetNextMerging(state, output_batch, eos));
+    if (*eos) SetGetNextEndTime(state);
+    return Status::OK();
+  }
 
   while (true) {
     {
@@ -193,6 +199,7 @@ Status ExchangeNode::GetNext(RuntimeState* state, RowBatch* output_batch, bool* 
       if (ReachedLimit()) {
         stream_recvr_->TransferAllResources(output_batch);
         *eos = true;
+        SetGetNextEndTime(state);
         return Status::OK();
       }
       if (output_batch->AtCapacity()) return Status::OK();
@@ -202,7 +209,10 @@ Status ExchangeNode::GetNext(RuntimeState* state, RowBatch* output_batch, bool* 
     stream_recvr_->TransferAllResources(output_batch);
     RETURN_IF_ERROR(FillInputRowBatch(state));
     *eos = (input_batch_ == NULL);
-    if (*eos) return Status::OK();
+    if (*eos) {
+      SetGetNextEndTime(state);
+      return Status::OK();
+    }
     next_row_idx_ = 0;
     DCHECK(input_batch_->row_desc()->LayoutIsPrefixOf(*output_batch->row_desc()));
   }

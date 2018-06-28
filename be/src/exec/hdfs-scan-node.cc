@@ -71,6 +71,7 @@ HdfsScanNode::~HdfsScanNode() {
 
 Status HdfsScanNode::GetNext(RuntimeState* state, RowBatch* row_batch, bool* eos) {
   SCOPED_TIMER(runtime_profile_->total_time_counter());
+  SetGetNextStartTime(state);
 
   if (!initial_ranges_issued_) {
     // We do this in GetNext() to maximise the amount of work we can do while waiting for
@@ -88,6 +89,7 @@ Status HdfsScanNode::GetNext(RuntimeState* state, RowBatch* row_batch, bool* eos
 
   Status status = GetNextInternal(state, row_batch, eos);
   if (!status.ok() || *eos) {
+    SetGetNextEndTime(state);
     unique_lock<mutex> l(lock_);
     lock_guard<SpinLock> l2(file_type_counts_);
     StopAndFinalizeCounters();

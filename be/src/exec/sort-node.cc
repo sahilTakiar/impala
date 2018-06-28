@@ -71,6 +71,7 @@ void SortNode::Codegen(RuntimeState* state) {
 
 Status SortNode::Open(RuntimeState* state) {
   SCOPED_TIMER(runtime_profile_->total_time_counter());
+  SetOpenStartTime(state);
   RETURN_IF_ERROR(ExecNode::Open(state));
   RETURN_IF_ERROR(child(0)->Open(state));
   // Claim reservation after the child has been opened to reduce the peak reservation
@@ -85,17 +86,20 @@ Status SortNode::Open(RuntimeState* state) {
   // The child has been opened and the sorter created. Sort the input.
   // The final merge is done on-demand as rows are requested in GetNext().
   RETURN_IF_ERROR(SortInput(state));
+  SetOpenEndTime(state);
   return Status::OK();
 }
 
 Status SortNode::GetNext(RuntimeState* state, RowBatch* row_batch, bool* eos) {
   SCOPED_TIMER(runtime_profile_->total_time_counter());
+  SetGetNextStartTime(state);
   RETURN_IF_ERROR(ExecDebugAction(TExecNodePhase::GETNEXT, state));
   RETURN_IF_CANCELLED(state);
   RETURN_IF_ERROR(QueryMaintenance(state));
 
   if (ReachedLimit()) {
     *eos = true;
+    SetGetNextEndTime(state);
     return Status::OK();
   } else {
     *eos = false;
@@ -135,6 +139,7 @@ Status SortNode::GetNext(RuntimeState* state, RowBatch* row_batch, bool* eos) {
   if (ReachedLimit()) {
     row_batch->set_num_rows(row_batch->num_rows() - (num_rows_returned_ - limit_));
     *eos = true;
+    SetGetNextEndTime(state);
   }
 
   COUNTER_SET(rows_returned_counter_, num_rows_returned_);
@@ -184,7 +189,6 @@ Status SortNode::SortInput(RuntimeState* state) {
   // again, the child can be closed at this point to release resources.
   if (!IsInSubplan()) child(0)->Close(state);
 
-  RETURN_IF_ERROR(sorter_->InputDone());
   return Status::OK();
 }
 

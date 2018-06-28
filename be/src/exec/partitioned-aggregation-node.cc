@@ -245,6 +245,7 @@ void PartitionedAggregationNode::Codegen(RuntimeState* state) {
 
 Status PartitionedAggregationNode::Open(RuntimeState* state) {
   SCOPED_TIMER(runtime_profile_->total_time_counter());
+  SetOpenStartTime(state);
   // Open the child before consuming resources in this node.
   RETURN_IF_ERROR(child(0)->Open(state));
   RETURN_IF_ERROR(ExecNode::Open(state));
@@ -339,12 +340,14 @@ Status PartitionedAggregationNode::Open(RuntimeState* state) {
   if (!grouping_exprs_.empty()) {
     RETURN_IF_ERROR(MoveHashPartitions(child(0)->rows_returned()));
   }
+  SetOpenEndTime(state);
   return Status::OK();
 }
 
 Status PartitionedAggregationNode::GetNext(
     RuntimeState* state, RowBatch* row_batch, bool* eos) {
   SCOPED_TIMER(runtime_profile_->total_time_counter());
+  SetGetNextStartTime(state);
   RETURN_IF_ERROR(ExecDebugAction(TExecNodePhase::GETNEXT, state));
   RETURN_IF_CANCELLED(state);
   RETURN_IF_ERROR(QueryMaintenance(state));

@@ -68,6 +68,7 @@ Status HdfsScanNodeMt::Open(RuntimeState* state) {
 
 Status HdfsScanNodeMt::GetNext(RuntimeState* state, RowBatch* row_batch, bool* eos) {
   SCOPED_TIMER(runtime_profile_->total_time_counter());
+  SetGetNextStartTime(state);
   RETURN_IF_ERROR(ExecDebugAction(TExecNodePhase::GETNEXT, state));
   RETURN_IF_CANCELLED(state);
   RETURN_IF_ERROR(QueryMaintenance(state));
@@ -82,6 +83,7 @@ Status HdfsScanNodeMt::GetNext(RuntimeState* state, RowBatch* row_batch, bool* e
     int64_t scanner_reservation = buffer_pool_client()->GetReservation();
     RETURN_IF_ERROR(StartNextScanRange(&scanner_reservation, &scan_range_));
     if (scan_range_ == nullptr) {
+      SetGetNextEndTime(state);
       *eos = true;
       StopAndFinalizeCounters();
       return Status::OK();
@@ -119,10 +121,14 @@ Status HdfsScanNodeMt::GetNext(RuntimeState* state, RowBatch* row_batch, bool* e
     scanner_->Close(row_batch);
     scanner_.reset();
     *eos = true;
+    SetGetNextEndTime(state);
   }
   COUNTER_SET(rows_returned_counter_, num_rows_returned_);
 
-  if (*eos) StopAndFinalizeCounters();
+  if (*eos) {
+    SetGetNextEndTime(state);
+    StopAndFinalizeCounters();
+  }
   return Status::OK();
 }
 

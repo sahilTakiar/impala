@@ -136,6 +136,7 @@ void TopNNode::Codegen(RuntimeState* state) {
 
 Status TopNNode::Open(RuntimeState* state) {
   SCOPED_TIMER(runtime_profile_->total_time_counter());
+  SetOpenStartTime(state);
   RETURN_IF_ERROR(ExecNode::Open(state));
   RETURN_IF_ERROR(
       tuple_row_less_than_->Open(pool_, state, expr_perm_pool(), expr_results_pool()));
@@ -178,11 +179,13 @@ Status TopNNode::Open(RuntimeState* state) {
   // Unless we are inside a subplan expecting to call Open()/GetNext() on the child
   // again, the child can be closed at this point.
   if (!IsInSubplan()) child(0)->Close(state);
+  SetOpenEndTime(state);
   return Status::OK();
 }
 
 Status TopNNode::GetNext(RuntimeState* state, RowBatch* row_batch, bool* eos) {
   SCOPED_TIMER(runtime_profile_->total_time_counter());
+  SetGetNextStartTime(state);
   RETURN_IF_ERROR(ExecDebugAction(TExecNodePhase::GETNEXT, state));
   RETURN_IF_CANCELLED(state);
   RETURN_IF_ERROR(QueryMaintenance(state));
@@ -209,6 +212,7 @@ Status TopNNode::GetNext(RuntimeState* state, RowBatch* row_batch, bool* eos) {
   // inside a subplan, we might choose to only selectively transfer, e.g., when the
   // block(s) in the pool are all full or when the pool has reached a certain size.
   if (*eos) row_batch->tuple_data_pool()->AcquireData(tuple_pool_.get(), false);
+  if (*eos) SetGetNextEndTime(state);
   return Status::OK();
 }
 
