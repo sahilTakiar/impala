@@ -18,6 +18,7 @@
 package org.apache.impala.planner;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -44,6 +45,8 @@ import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.Multimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.common.math.LongMath;
@@ -71,6 +74,8 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
 
   // unique w/in plan tree; assigned by planner, and not necessarily in c'tor
   protected PlanNodeId id_;
+
+  protected List<PlanNodeId> pipelineIds_;
 
   protected long limit_; // max. # of rows to be returned; 0: no limit_
 
@@ -184,6 +189,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
   }
 
   public PlanNodeId getId() { return id_; }
+  public List<PlanNodeId> getPipelineIds() { return pipelineIds_; }
   public void setId(PlanNodeId id) {
     Preconditions.checkState(id_ == null);
     id_ = id;
@@ -321,6 +327,15 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
       expBuilder.append(PrintUtils.printCardinality(" ", cardinality_));
       expBuilder.append("\n");
     }
+
+    expBuilder.append(detailPrefix);
+    expBuilder.append("Pipelines: ");
+    List<String> pipelines = Lists.newArrayList();
+    for (PlanNodeId pipe: pipelineIds_) {
+      pipelines.add(pipe.toString());
+    }
+    expBuilder.append(Joiner.on(", ").join(pipelines) + "\n");
+
 
     // Print the children. Do not traverse into the children of an Exchange node to
     // avoid crossing fragment boundaries.
@@ -614,6 +629,32 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
    * into pipelined units for resource estimation.
    */
   public boolean isBlockingNode() { return false; }
+
+  /**
+   * Fills in nodesToPipelines with the pipelines that this PlanNode is a member of.
+   *
+   * Returns the pipeline that this PlanNode is a part of when returning results.
+   */
+  public PlanNodeId computePipelineMembership() {
+    /*Preconditions.checkState(
+        children_.size() <= 1, "Plan nodes with > 1 child must override");*/
+    if (children_.size() == 0) {
+      // Leaf node, e.g. SCAN.
+      pipelineIds_ = Arrays.asList(id_);
+      return id_;
+    }
+    PlanNodeId childPipeline = children_.get(0).computePipelineMembership();
+    // Default behaviour for simple blocking or streaming nodes.
+    if (isBlockingNode()) {
+      // Executes as root of one pipeline and leaf of another.
+      pipelineIds_ = Arrays.asList(id_, childPipeline);
+      return id_;
+    } else {
+      // Streaming with child, e.g. SELECT.
+      pipelineIds_ = Arrays.asList(childPipeline);
+      return childPipeline;
+    }
+  }
 
   /**
    * Compute peak resources consumed when executing this PlanNode, initializing

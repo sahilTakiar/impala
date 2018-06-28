@@ -38,6 +38,7 @@ import org.slf4j.LoggerFactory;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Multimap;
 
 /**
  * Node that merges the results of its child plans, Normally, this is done by
@@ -320,5 +321,14 @@ public class UnionNode extends PlanNode {
       }
     }
     return output.toString();
+  }
+
+  @Override
+  public PlanNodeId computePipelineMembership() {
+    // TODO: not sure what to do here - handle each union branch as a separate pipeline?
+    for (PlanNode child: children_) {
+      child.computePipelineMembership();
+    }
+    return id_;
   }
 }

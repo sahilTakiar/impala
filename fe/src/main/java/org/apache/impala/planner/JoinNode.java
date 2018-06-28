@@ -18,6 +18,7 @@
 package org.apache.impala.planner;
 
 import java.util.Collections;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -689,5 +690,13 @@ public abstract class JoinNode extends PlanNode {
     ResourceProfile probePhaseProfile =
         finishedBuildProfile.sum(probeSideProfile.postOpenProfile);
     return new ExecPhaseResourceProfiles(duringOpenProfile, probePhaseProfile);
+  }
+
+  @Override
+  public PlanNodeId computePipelineMembership() {
+    PlanNodeId probePipe = children_.get(0).computePipelineMembership();
+    PlanNodeId buildPipe = children_.get(1).computePipelineMembership();
+    pipelineIds_ = Arrays.asList(probePipe, buildPipe);
+    return probePipe;
   }
 }
