@@ -363,6 +363,7 @@ Status PartitionedAggregationNode::GetNext(
     if (!singleton_output_tuple_returned_) GetSingletonOutput(row_batch);
     singleton_output_tuple_returned_ = true;
     *eos = true;
+    SetGetNextEndTime(state);
     return Status::OK();
   }
 
@@ -375,6 +376,7 @@ Status PartitionedAggregationNode::GetNext(
   }
 
   *eos = partition_eos_ && child_eos_;
+  if (*eos) SetGetNextEndTime(state);
   COUNTER_SET(rows_returned_counter_, num_rows_returned_);
   return Status::OK();
 }
