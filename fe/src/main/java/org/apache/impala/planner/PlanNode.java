@@ -34,8 +34,10 @@ import org.apache.impala.common.ImpalaException;
 import org.apache.impala.common.PrintUtils;
 import org.apache.impala.common.TreeNode;
 import org.apache.impala.planner.RuntimeFilterGenerator.RuntimeFilter;
+import org.apache.impala.thrift.TExecNodePhase;
 import org.apache.impala.thrift.TExecStats;
 import org.apache.impala.thrift.TExplainLevel;
+import org.apache.impala.thrift.TPipelineMembership;
 import org.apache.impala.thrift.TPlan;
 import org.apache.impala.thrift.TPlanNode;
 import org.apache.impala.thrift.TQueryOptions;
@@ -75,7 +77,24 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
   // unique w/in plan tree; assigned by planner, and not necessarily in c'tor
   protected PlanNodeId id_;
 
-  protected List<PlanNodeId> pipelineIds_;
+  public static class PipelineMembership {
+    public PipelineMembership(PlanNodeId id ,TExecNodePhase phase) {
+      this.id = id;
+      this.phase = phase;
+    }
+    public final PlanNodeId id;
+    public final TExecNodePhase phase;
+
+    public TPipelineMembership toThrift() {
+      return new TPipelineMembership(id.asInt(), phase);
+    }
+
+    public String toString() {
+      return phase.toString() + ":" + id.toString();
+    }
+  }
+
+  protected List<PipelineMembership> pipelineIds_;
 
   protected long limit_; // max. # of rows to be returned; 0: no limit_
 
@@ -189,7 +208,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
   }
 
   public PlanNodeId getId() { return id_; }
-  public List<PlanNodeId> getPipelineIds() { return pipelineIds_; }
+  public List<PipelineMembership> getPipelineIds() { return pipelineIds_; }
   public void setId(PlanNodeId id) {
     Preconditions.checkState(id_ == null);
     id_ = id;
@@ -331,7 +350,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     expBuilder.append(detailPrefix);
     expBuilder.append("Pipelines: ");
     List<String> pipelines = Lists.newArrayList();
-    for (PlanNodeId pipe: pipelineIds_) {
+    for (PipelineMembership pipe: pipelineIds_) {
       pipelines.add(pipe.toString());
     }
     expBuilder.append(Joiner.on(", ").join(pipelines) + "\n");
@@ -425,6 +444,10 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     msg.setDisable_codegen(disableCodegen_);
     Preconditions.checkState(nodeResourceProfile_.isValid());
     msg.resource_profile = nodeResourceProfile_.toThrift();
+    msg.pipelines = Lists.newArrayList();
+    for (PipelineMembership pipe : pipelineIds_) {
+      msg.pipelines.add(pipe.toThrift());
+    }
     toThrift(msg);
     container.addToNodes(msg);
     // For the purpose of the BE consider ExchangeNodes to have no children.
@@ -640,18 +663,21 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         children_.size() <= 1, "Plan nodes with > 1 child must override");*/
     if (children_.size() == 0) {
       // Leaf node, e.g. SCAN.
-      pipelineIds_ = Arrays.asList(id_);
+      pipelineIds_ = Arrays.asList(new PipelineMembership(id_, TExecNodePhase.GETNEXT));
       return id_;
     }
     PlanNodeId childPipeline = children_.get(0).computePipelineMembership();
     // Default behaviour for simple blocking or streaming nodes.
     if (isBlockingNode()) {
       // Executes as root of one pipeline and leaf of another.
-      pipelineIds_ = Arrays.asList(id_, childPipeline);
+      pipelineIds_ = Arrays.asList(
+          new PipelineMembership(id_, TExecNodePhase.GETNEXT),
+          new PipelineMembership(childPipeline, TExecNodePhase.OPEN));
       return id_;
     } else {
       // Streaming with child, e.g. SELECT.
-      pipelineIds_ = Arrays.asList(childPipeline);
+      pipelineIds_ = Arrays.asList(
+          new PipelineMembership(childPipeline, TExecNodePhase.GETNEXT));
       return childPipeline;
     }
   }

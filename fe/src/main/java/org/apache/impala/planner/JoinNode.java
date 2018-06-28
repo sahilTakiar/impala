@@ -33,6 +33,7 @@ import org.apache.impala.catalog.ColumnStats;
 import org.apache.impala.catalog.FeTable;
 import org.apache.impala.common.ImpalaException;
 import org.apache.impala.common.Pair;
+import org.apache.impala.thrift.TExecNodePhase;
 import org.apache.impala.thrift.TJoinDistributionMode;
 import org.apache.impala.service.BackendConfig;
 import org.apache.impala.thrift.TQueryOptions;
@@ -696,7 +697,9 @@ public abstract class JoinNode extends PlanNode {
   public PlanNodeId computePipelineMembership() {
     PlanNodeId probePipe = children_.get(0).computePipelineMembership();
     PlanNodeId buildPipe = children_.get(1).computePipelineMembership();
-    pipelineIds_ = Arrays.asList(probePipe, buildPipe);
+    pipelineIds_ = Arrays.asList(
+        new PipelineMembership(probePipe, TExecNodePhase.GETNEXT),
+        new PipelineMembership(buildPipe, TExecNodePhase.OPEN));
     return probePipe;
   }
 }

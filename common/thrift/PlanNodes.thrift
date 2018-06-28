@@ -546,6 +546,11 @@ struct TCardinalityCheckNode {
   1: required string display_statement
 }
 
+struct TPipelineMembership {
+  1: required Types.TPlanNodeId pipe_id
+  2: required TExecNodePhase phase
+}
+
 // This is essentially a union of all messages corresponding to subclasses
 // of PlanNode.
 struct TPlanNode {
@@ -564,6 +569,8 @@ struct TPlanNode {
   // Set to true if codegen should be disabled for this plan node. Otherwise the plan
   // node is codegen'd if the backend supports it.
   8: required bool disable_codegen
+
+  27: required list<TPipelineMembership> pipelines
 
   // one field per PlanNode subclass
   9: optional THdfsScanNode hdfs_scan_node
