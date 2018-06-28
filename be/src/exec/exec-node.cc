@@ -129,7 +129,7 @@ ExecNode::ExecNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl
     if (pipe.phase == TExecNodePhase::GETNEXT) has_getnext_pipe_ = true;
     if (pipe.phase == TExecNodePhase::OPEN) has_open_pipe_ = true;
     runtime_profile_->AddInfoString(
-        Substitute("Pipe$0", _TExecNodePhase_VALUES_TO_NAMES.find(pipe.phase)->second),
+        Substitute("Pipe $0", _TExecNodePhase_VALUES_TO_NAMES.find(pipe.phase)->second),
         Substitute("$0", pipe.pipe_id));
   }
 }
