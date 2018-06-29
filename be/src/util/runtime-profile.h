@@ -34,6 +34,7 @@ namespace impala {
 class ObjectPool;
 
 struct PipelineNode {
+  std::string finstance;
   std::string node_name;
   int pipe_id;
   std::string phase;

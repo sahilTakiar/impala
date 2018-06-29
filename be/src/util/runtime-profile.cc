@@ -1198,11 +1198,19 @@ void RuntimeProfile::GetInfoStrings(InfoStrings* strs) const {
 
 vector<PipelineNode> RuntimeProfile::GetPipelineNodes() const {
   vector<PipelineNode> result;
-  vector<const RuntimeProfile*> stack;
-  stack.push_back(this);
+  // [(enclosing finstance, profile)]
+  vector<pair<string, const RuntimeProfile*>> stack;
+  stack.emplace_back("", this);
   while (!stack.empty()) {
-    const RuntimeProfile* prof = stack.back();
+    auto curr = stack.back();
+    string finstance = curr.first;
+    const RuntimeProfile* prof = curr.second;
     stack.pop_back();
+
+    if (prof->name().find("Instance ") == 0) {
+      finstance = prof->name();
+    }
+    // Info strings are not in averaged fragments, so this implicitly filters those out.
     std::map<std::string, std::string> info_strings;
     prof->GetInfoStrings(&info_strings);
     for (auto& entry : info_strings) {
@@ -1213,6 +1221,7 @@ vector<PipelineNode> RuntimeProfile::GetPipelineNodes() const {
       split(toks, k, is_any_of(" "));
       DCHECK_EQ(2, toks.size());
       PipelineNode pnode;
+      pnode.finstance = finstance;
       pnode.node_name = prof->name();
       pnode.pipe_id = atoi(v.c_str());
       pnode.phase = toks[1];
@@ -1232,13 +1241,18 @@ vector<PipelineNode> RuntimeProfile::GetPipelineNodes() const {
 
     vector<RuntimeProfile*> children;
     const_cast<RuntimeProfile*>(prof)->GetChildren(&children);
-    for (RuntimeProfile* child : children) stack.push_back(child);
+    for (RuntimeProfile* child : children) stack.emplace_back(finstance, child);
   }
 
   for (PipelineNode& node : result) {
     LOG(INFO) << "PipelineNode: " << node.DebugString();
   }
   return result;
+}
+
+string PipelineNode::DebugString() {
+  return Substitute("$0 $1 $2 $3 $4 $5", finstance, node_name, pipe_id, phase,
+      start_time_us, end_time_us);
 }
 
 }

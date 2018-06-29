@@ -2279,8 +2279,4 @@ std::vector<PipelineNode> ImpalaServer::GetPipelineNodes(TUniqueId query_id) {
     return query_record->second->pipeline_nodes;
   }
 }
-
-string PipelineNode::DebugString() {
-  return Substitute("$0 $1 $2 $3 $4", node_name, pipe_id, phase, start_time_us, end_time_us);
-}
 }
