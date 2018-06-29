@@ -139,6 +139,9 @@ void ImpalaHttpHandler::RegisterHandlers(Webserver* webserver) {
       [this](const auto& args, auto* doc) {
         this->QuerySummaryHandler(false, false, args, doc); }, false);
 
+  webserver->RegisterUrlCallback("/query_times", "query_times.tmpl",
+      MakeCallback(this, &ImpalaHttpHandler::QueryTimes), false);
+
   RegisterLogLevelCallbacks(webserver, true);
 }
 
@@ -694,6 +697,34 @@ void PlanToJson(const vector<TPlanFragment>& fragments, const TExecSummary& summ
   value->AddMember("plan_nodes", nodes, document->GetAllocator());
 }
 
+}
+
+
+
+void ImpalaHttpHandler::QueryTimes(
+    const Webserver::ArgumentMap& args, Document* document) {
+  Value v(kObjectType);
+  TUniqueId query_id;
+  Status status = ParseIdFromArguments(args, &query_id, "query_id");
+  Value query_id_val(PrintId(query_id).c_str(), document->GetAllocator());
+  document->AddMember("query_id", query_id_val, document->GetAllocator());
+  {
+    Value times(kArrayType);
+    for (int i = 0; i <= 100; i += 10) {
+      Value val(i);
+      times.PushBack(val, document->GetAllocator());
+    }
+    v.AddMember("Scanner", times, document->GetAllocator());
+  }
+  {
+    Value times(kArrayType);
+    for (int i = 100; i >= 0; i -= 10) {
+      Value val(i);
+      times.PushBack(val, document->GetAllocator());
+    }
+    v.AddMember("Sink", times, document->GetAllocator());
+  }
+  document->AddMember("data", v, document->GetAllocator());
 }
 
 void ImpalaHttpHandler::QueryBackendsHandler(

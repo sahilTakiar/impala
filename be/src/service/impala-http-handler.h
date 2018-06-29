@@ -96,6 +96,9 @@ class ImpalaHttpHandler {
   void QueryBackendsHandler(
       const Webserver::ArgumentMap& args, rapidjson::Document* document);
 
+    void QueryTimes(
+      const Webserver::ArgumentMap& args, rapidjson::Document* document);
+
   /// If 'args' contains a query id, serializes all fragment instance states for all
   /// backends for that query to 'document'.
   void QueryFInstancesHandler(
