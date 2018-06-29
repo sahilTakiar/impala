@@ -45,6 +45,18 @@ struct PipelineNode {
   std::string DebugString();
 };
 
+struct Pipeline {
+  int pipe_id;
+  string host;
+  int64_t start_time_us;
+  int64_t end_time_us;
+  std::string DebugString();
+};
+
+struct PipelineAnalysis {
+  std::vector<Pipeline> pipelines;
+  std::vector<PipelineNode> nodes;
+};
 
 /// Runtime profile is a group of profiling counters.  It supports adding named counters
 /// and being able to serialize and deserialize them.
@@ -382,6 +394,8 @@ class RuntimeProfile { // NOLINT: This struct is not packed, but there are not s
   void ComputeTimeInProfile();
 
   std::vector<PipelineNode> GetPipelineNodes() const;
+
+  PipelineAnalysis GetPipelineAnalysis() const;
 
  private:
   /// Pool for allocated counters. Usually owned by the creator of this

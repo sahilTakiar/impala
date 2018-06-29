@@ -223,7 +223,7 @@ void ImpalaHttpHandler::QueryProfileHandler(const Webserver::ArgumentMap& args,
   }
 
   LOG(INFO) << "PIPE";
-  server_->GetPipelineNodes(unique_id);
+  server_->GetPipelineAnalysis(unique_id);
   LOG(INFO) << "PIPE DONE";
 
   Value profile(ss.str().c_str(), document->GetAllocator());

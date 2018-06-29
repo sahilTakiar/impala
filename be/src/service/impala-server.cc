@@ -803,7 +803,7 @@ void ImpalaServer::ArchiveQuery(const ClientRequestState& query) {
                                << status.GetDetail();
     return;
   }
-  vector<PipelineNode> pipeline_nodes = query.profile()->GetPipelineNodes();
+  PipelineAnalysis pipeline_analysis = query.profile()->GetPipelineAnalysis();
 
   // If there was an error initialising archival (e.g. directory is not writeable),
   // FLAGS_log_query_to_file will have been set to false
@@ -821,7 +821,7 @@ void ImpalaServer::ArchiveQuery(const ClientRequestState& query) {
   }
 
   if (FLAGS_query_log_size == 0) return;
-  QueryStateRecord record(query, true, encoded_profile_str, pipeline_nodes);
+  QueryStateRecord record(query, true, encoded_profile_str, pipeline_analysis);
   if (query.GetCoordinator() != nullptr)
     query.GetCoordinator()->GetTExecSummary(&record.exec_summary);
   {
@@ -1785,7 +1785,8 @@ void ImpalaServer::AddLocalBackendToStatestore(
 }
 
 ImpalaServer::QueryStateRecord::QueryStateRecord(const ClientRequestState& request_state,
-    bool copy_profile, const string& encoded_profile, const vector<PipelineNode>& pipeline_nodes2) {
+    bool copy_profile, const string& encoded_profile,
+    const PipelineAnalysis& pipeline_analysis2) {
   id = request_state.query_id();
   const TExecRequest& request = request_state.exec_request();
 
@@ -1825,7 +1826,7 @@ ImpalaServer::QueryStateRecord::QueryStateRecord(const ClientRequestState& reque
     } else {
       encoded_profile_str = encoded_profile;
     }
-    pipeline_nodes = pipeline_nodes2;
+    pipeline_analysis = pipeline_analysis2;
   }
 
   // Save the query fragments so that the plan can be visualised.
@@ -2262,11 +2263,10 @@ void ImpalaServer::UpdateFilter(TUpdateFilterResult& result,
   client_request_state->UpdateFilter(params);
 }
 
-std::vector<PipelineNode> ImpalaServer::GetPipelineNodes(TUniqueId query_id) {
-  shared_ptr<ClientRequestState> client_request_state =
-      GetClientRequestState(query_id);
+PipelineAnalysis ImpalaServer::GetPipelineAnalysis(TUniqueId query_id) {
+  shared_ptr<ClientRequestState> client_request_state = GetClientRequestState(query_id);
   if (client_request_state.get() != nullptr) {
-    return client_request_state->profile()->GetPipelineNodes();
+    return client_request_state->profile()->GetPipelineAnalysis();
   }
   {
     lock_guard<mutex> l(query_log_lock_);
@@ -2276,7 +2276,7 @@ std::vector<PipelineNode> ImpalaServer::GetPipelineNodes(TUniqueId query_id) {
       VLOG(1) << err;
       return {};
     }
-    return query_record->second->pipeline_nodes;
+    return query_record->second->pipeline_analysis;
   }
 }
 }

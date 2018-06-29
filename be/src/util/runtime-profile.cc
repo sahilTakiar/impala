@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <utility>
 
 #include <boost/algorithm/string/split.hpp>
@@ -1253,15 +1254,73 @@ vector<PipelineNode> RuntimeProfile::GetPipelineNodes() const {
     for (RuntimeProfile* child : children) stack.emplace_back(finstance, child);
   }
 
+  sort(result.begin(), result.end(), [](const PipelineNode& p1, const PipelineNode& p2) {
+    // Sort by pipeline desc, height desc, finstance
+    if (p1.pipe_id != p2.pipe_id) {
+      return p1.pipe_id > p2.pipe_id;
+    }
+    if (p1.height != p2.height) {
+      return p1.height > p2.height;
+    }
+    return p1.finstance < p2.finstance;
+  });
+
   for (PipelineNode& node : result) {
     LOG(INFO) << "PipelineNode: " << node.DebugString();
   }
   return result;
 }
 
+PipelineAnalysis RuntimeProfile::GetPipelineAnalysis() const {
+  PipelineAnalysis result;
+  result.nodes = GetPipelineNodes();
+  // Map from host to pipeline info.
+  map<string, Pipeline> curr_pipes;
+  int curr_pipe_id = -1;
+
+  for (PipelineNode& node : result.nodes) {
+    size_t host_idx = node.finstance.find("host=");
+    size_t host_end = node.finstance.find(")", host_idx);
+    string host = node.finstance.substr(host_idx + 5, host_end - host_idx - 5);
+
+    if (node.pipe_id != curr_pipe_id) {
+      for (auto& entry : curr_pipes) {
+        result.pipelines.push_back(entry.second);
+      }
+      curr_pipes.clear();
+      curr_pipe_id = node.pipe_id;
+    }
+    if (curr_pipes.find(host) == curr_pipes.end()) {
+      Pipeline* curr_pipe = &curr_pipes[host];
+      curr_pipe->pipe_id = node.pipe_id;
+      curr_pipe->host = host;
+      curr_pipe->start_time_us = numeric_limits<int64_t>::max();
+      // Pipeline ends once top node has ended.
+      curr_pipe->end_time_us = node.end_time_us;
+    }
+    // Pipeline starts once rows start flowing through it.
+    if (node.phase == "GETNEXT") {
+      Pipeline* curr_pipe = &curr_pipes[host];
+      curr_pipe->start_time_us = min(curr_pipe->start_time_us, node.start_time_us);
+    }
+  }
+  for (auto& entry : curr_pipes) {
+    result.pipelines.push_back(entry.second);
+  }
+  for (Pipeline& pipeline : result.pipelines) {
+    LOG(INFO) << "Pipeline: " << pipeline.DebugString();
+  }
+  return result;
+}
+
+string Pipeline::DebugString() {
+  return Substitute(
+      "id=$0 host=$1 start=$2 end=$3", pipe_id, host, start_time_us, end_time_us);
+}
+
 string PipelineNode::DebugString() {
-  return Substitute("$0 $1 pipe_id=$2 height=$3 $4 start=$5 end=$6", finstance,
-      node_name, pipe_id, height, phase, start_time_us, end_time_us);
+  return Substitute("$0 $1 pipe_id=$2 height=$3 $4 start=$5 end=$6", finstance, node_name,
+      pipe_id, height, phase, start_time_us, end_time_us);
 }
 
 }
