@@ -1217,6 +1217,20 @@ vector<PipelineNode> RuntimeProfile::GetPipelineNodes() const {
     if (prof->name().find("Instance ") == 0) {
       finstance = prof->name();
     }
+    if (prof->name().find("CodeGen") == 0 && finstance != "") {
+      PipelineNode pnode;
+      pnode.finstance = finstance;
+      pnode.node_name = prof->name();
+      pnode.pipe_id = -2;
+      pnode.height = 0;
+      pnode.phase = "CODEGEN";
+      RuntimeProfile::Counter* c = const_cast<RuntimeProfile*>(prof)->GetCounter("CodegenStartTime");
+      if (c != nullptr) pnode.start_time_us = c->value();
+      c = const_cast<RuntimeProfile*>(prof)->GetCounter("CodegenEndTime");
+      if (c != nullptr) pnode.end_time_us = c->value();
+      result.push_back(pnode);
+      continue;
+    }
     // Info strings are not in averaged fragments, so this implicitly filters those out.
     std::map<std::string, std::string> info_strings;
     prof->GetInfoStrings(&info_strings);
@@ -1280,8 +1294,11 @@ PipelineAnalysis RuntimeProfile::GetPipelineAnalysis() const {
 
   for (PipelineNode& node : result.nodes) {
     size_t host_idx = node.finstance.find("host=");
-    size_t host_end = node.finstance.find(")", host_idx);
-    string host = node.finstance.substr(host_idx + 5, host_end - host_idx - 5);
+    string host;
+    if (host_idx != string::npos) {
+      size_t host_end = node.finstance.find(")", host_idx);
+      host = node.finstance.substr(host_idx + 5, host_end - host_idx - 5);
+    }
 
     if (node.pipe_id != curr_pipe_id) {
       for (auto& entry : curr_pipes) {

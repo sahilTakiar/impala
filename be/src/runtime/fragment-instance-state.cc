@@ -241,6 +241,11 @@ Status FragmentInstanceState::Open() {
   if (runtime_state_->ShouldCodegen()) {
     UpdateState(StateEvent::CODEGEN_START);
     RETURN_IF_ERROR(runtime_state_->CreateCodegen());
+    int64_t start;
+    runtime_state_->utc_timestamp()->UtcToUnixTimeMicros(&start);
+    RuntimeProfile::Counter* start_c =
+        runtime_state_->codegen()->runtime_profile()->AddCounter("CodegenStartTime", TUnit::TIME_US);
+    COUNTER_SET(start_c, GetCurrentTimeMicros() - start);
     {
       SCOPED_TIMER(runtime_state_->codegen()->ir_generation_timer());
       SCOPED_TIMER(runtime_state_->codegen()->runtime_profile()->total_time_counter());
@@ -258,6 +263,9 @@ Status FragmentInstanceState::Open() {
     LlvmCodeGen* codegen = runtime_state_->codegen();
     DCHECK(codegen != nullptr);
     RETURN_IF_ERROR(codegen->FinalizeModule());
+    RuntimeProfile::Counter* end_c =
+        runtime_state_->codegen()->runtime_profile()->AddCounter("CodegenEndTime", TUnit::TIME_US);
+    COUNTER_SET(end_c, GetCurrentTimeMicros() - start);
   }
 
   {
