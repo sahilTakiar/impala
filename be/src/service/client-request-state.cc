@@ -1198,4 +1198,5 @@ void ClientRequestState::UpdateFilter(const TUpdateFilterParams& params) {
   DCHECK(coord_.get());
   coord_->UpdateFilter(params);
 }
+
 }

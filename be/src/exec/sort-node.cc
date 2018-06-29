@@ -189,6 +189,7 @@ Status SortNode::SortInput(RuntimeState* state) {
   // again, the child can be closed at this point to release resources.
   if (!IsInSubplan()) child(0)->Close(state);
 
+  RETURN_IF_ERROR(sorter_->InputDone());
   return Status::OK();
 }
 

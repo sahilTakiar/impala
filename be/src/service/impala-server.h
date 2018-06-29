@@ -485,6 +485,8 @@ class ImpalaServer : public ImpalaServiceIf,
     TQueryOptions QueryOptions();
   };
 
+  std::vector<PipelineNode> GetPipelineNodes(TUniqueId query_id);
+
  private:
   struct ExpirationEvent;
   friend class ChildQuery;
@@ -664,6 +666,8 @@ class ImpalaServer : public ImpalaServiceIf,
     /// Base64 encoded runtime profile
     std::string encoded_profile_str;
 
+    vector<PipelineNode> pipeline_nodes;
+
     /// Query id
     TUniqueId id;
 
@@ -737,7 +741,7 @@ class ImpalaServer : public ImpalaServiceIf,
     /// If encoded_str is non-empty, it is the base64 encoded string for
     /// exec_state->profile.
     QueryStateRecord(const ClientRequestState& exec_state, bool copy_profile = false,
-        const std::string& encoded_str = "");
+        const std::string& encoded_str = "", const vector<PipelineNode>& pipeline_nodes2={});
 
     /// Default constructor used only when participating in collections
     QueryStateRecord() { }

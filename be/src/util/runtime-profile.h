@@ -33,6 +33,17 @@ namespace impala {
 
 class ObjectPool;
 
+struct PipelineNode {
+  std::string node_name;
+  int pipe_id;
+  std::string phase;
+  // Times are set if present in profile.
+  int64_t start_time_us = -1;
+  int64_t end_time_us = -1;
+  std::string DebugString();
+};
+
+
 /// Runtime profile is a group of profiling counters.  It supports adding named counters
 /// and being able to serialize and deserialize them.
 /// The profiles support a tree structure to form a hierarchy of counters.
@@ -44,6 +55,7 @@ class ObjectPool;
 class RuntimeProfile { // NOLINT: This struct is not packed, but there are not so many
                        // of them that it makes a performance difference
  public:
+  typedef std::map<std::string, std::string> InfoStrings;
   class Counter {
    public:
     Counter(TUnit::type unit, int64_t value = 0) :
@@ -252,6 +264,8 @@ class RuntimeProfile { // NOLINT: This struct is not packed, but there are not s
   /// the key does not exist.
   const std::string* GetInfoString(const std::string& key) const;
 
+  void GetInfoStrings(InfoStrings* strs) const;
+
   /// Stops updating all counters in this profile that are periodically updated by a
   /// background thread (i.e. sampling, rate, bucketing and time series counters).
   /// Must be called before the profile is destroyed if any such counters are active.
@@ -365,6 +379,8 @@ class RuntimeProfile { // NOLINT: This struct is not packed, but there are not s
   /// This function updates local_time_percent_ for each profile.
   void ComputeTimeInProfile();
 
+  std::vector<PipelineNode> GetPipelineNodes() const;
+
  private:
   /// Pool for allocated counters. Usually owned by the creator of this
   /// object, but occasionally allocated in the constructor.
@@ -427,7 +443,6 @@ class RuntimeProfile { // NOLINT: This struct is not packed, but there are not s
   /// Protects child_map_ and children_.
   mutable SpinLock children_lock_;
 
-  typedef std::map<std::string, std::string> InfoStrings;
   InfoStrings info_strings_;
 
   /// Keeps track of the order in which InfoStrings are displayed when printed.

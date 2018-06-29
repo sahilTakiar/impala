@@ -22,6 +22,7 @@
 #include <iostream>
 #include <utility>
 
+#include <boost/algorithm/string/split.hpp>
 #include <boost/bind.hpp>
 #include <boost/thread/locks.hpp>
 #include <boost/thread/thread.hpp>
@@ -38,6 +39,9 @@
 #include "util/scope-exit-trigger.h"
 
 #include "common/names.h"
+
+using boost::algorithm::split;
+using boost::algorithm::is_any_of;
 
 namespace impala {
 
@@ -1185,6 +1189,56 @@ int64_t RuntimeProfile::SummaryStatsCounter::MaxValue() {
 int32_t RuntimeProfile::SummaryStatsCounter::TotalNumValues() {
   lock_guard<SpinLock> l(lock_);
   return total_num_values_;
+}
+
+void RuntimeProfile::GetInfoStrings(InfoStrings* strs) const {
+  lock_guard<SpinLock> l(info_strings_lock_);
+  *strs = info_strings_;
+}
+
+vector<PipelineNode> RuntimeProfile::GetPipelineNodes() const {
+  vector<PipelineNode> result;
+  vector<const RuntimeProfile*> stack;
+  stack.push_back(this);
+  while (!stack.empty()) {
+    const RuntimeProfile* prof = stack.back();
+    stack.pop_back();
+    std::map<std::string, std::string> info_strings;
+    prof->GetInfoStrings(&info_strings);
+    for (auto& entry : info_strings) {
+      const string& k = entry.first;
+      const string& v = entry.second;
+      if (k.find("Pipe ") != 0) continue;
+      vector<string> toks;
+      split(toks, k, is_any_of(" "));
+      DCHECK_EQ(2, toks.size());
+      PipelineNode pnode;
+      pnode.node_name = prof->name();
+      pnode.pipe_id = atoi(v.c_str());
+      pnode.phase = toks[1];
+      if (pnode.phase == "GETNEXT") {
+        RuntimeProfile::Counter* c = const_cast<RuntimeProfile*>(prof)->GetCounter("GetNextStartTime");
+        if (c != nullptr) pnode.start_time_us = c->value();
+        c = const_cast<RuntimeProfile*>(prof)->GetCounter("GetNextEndTime");
+        if (c != nullptr) pnode.end_time_us = c->value();
+      } else if (pnode.phase == "OPEN") {
+        RuntimeProfile::Counter* c = const_cast<RuntimeProfile*>(prof)->GetCounter("OpenStartTime");
+        if (c != nullptr) pnode.start_time_us = c->value();
+        c = const_cast<RuntimeProfile*>(prof)->GetCounter("OpenEndTime");
+        if (c != nullptr) pnode.end_time_us = c->value();
+      }
+      result.push_back(pnode);
+    }
+
+    vector<RuntimeProfile*> children;
+    const_cast<RuntimeProfile*>(prof)->GetChildren(&children);
+    for (RuntimeProfile* child : children) stack.push_back(child);
+  }
+
+  for (PipelineNode& node : result) {
+    LOG(INFO) << "PipelineNode: " << node.DebugString();
+  }
+  return result;
 }
 
 }

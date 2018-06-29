@@ -18,6 +18,7 @@
 package org.apache.impala.planner;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import org.apache.impala.analysis.Analyzer;
@@ -26,6 +27,7 @@ import org.apache.impala.analysis.TupleDescriptor;
 import org.apache.impala.analysis.TupleId;
 import org.apache.impala.analysis.SlotDescriptor;
 import org.apache.impala.analysis.SlotRef;
+import org.apache.impala.thrift.TExecNodePhase;
 import org.apache.impala.thrift.TExplainLevel;
 import org.apache.impala.thrift.TExpr;
 import org.apache.impala.thrift.TPlanNode;
@@ -329,6 +331,8 @@ public class UnionNode extends PlanNode {
     for (PlanNode child: children_) {
       child.computePipelineMembership();
     }
+    pipelineIds_ = Arrays.asList(
+        new PipelineMembership(id_, TExecNodePhase.GETNEXT));
     return id_;
   }
 }

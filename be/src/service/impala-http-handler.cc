@@ -213,6 +213,7 @@ void ImpalaHttpHandler::QueryProfileHandler(const Webserver::ArgumentMap& args,
     return;
   }
 
+  LOG(INFO) << "PROF HANDLER";
   stringstream ss;
   Status status = server_->GetRuntimeProfileStr(unique_id, "", false, &ss);
   if (!status.ok()) {
@@ -220,6 +221,10 @@ void ImpalaHttpHandler::QueryProfileHandler(const Webserver::ArgumentMap& args,
     document->AddMember("error", error, document->GetAllocator());
     return;
   }
+
+  LOG(INFO) << "PIPE";
+  server_->GetPipelineNodes(unique_id);
+  LOG(INFO) << "PIPE DONE";
 
   Value profile(ss.str().c_str(), document->GetAllocator());
   document->AddMember("profile", profile, document->GetAllocator());

@@ -803,6 +803,7 @@ void ImpalaServer::ArchiveQuery(const ClientRequestState& query) {
                                << status.GetDetail();
     return;
   }
+  vector<PipelineNode> pipeline_nodes = query.profile()->GetPipelineNodes();
 
   // If there was an error initialising archival (e.g. directory is not writeable),
   // FLAGS_log_query_to_file will have been set to false
@@ -820,7 +821,7 @@ void ImpalaServer::ArchiveQuery(const ClientRequestState& query) {
   }
 
   if (FLAGS_query_log_size == 0) return;
-  QueryStateRecord record(query, true, encoded_profile_str);
+  QueryStateRecord record(query, true, encoded_profile_str, pipeline_nodes);
   if (query.GetCoordinator() != nullptr)
     query.GetCoordinator()->GetTExecSummary(&record.exec_summary);
   {
@@ -1784,7 +1785,7 @@ void ImpalaServer::AddLocalBackendToStatestore(
 }
 
 ImpalaServer::QueryStateRecord::QueryStateRecord(const ClientRequestState& request_state,
-    bool copy_profile, const string& encoded_profile) {
+    bool copy_profile, const string& encoded_profile, const vector<PipelineNode>& pipeline_nodes2) {
   id = request_state.query_id();
   const TExecRequest& request = request_state.exec_request();
 
@@ -1824,6 +1825,7 @@ ImpalaServer::QueryStateRecord::QueryStateRecord(const ClientRequestState& reque
     } else {
       encoded_profile_str = encoded_profile;
     }
+    pipeline_nodes = pipeline_nodes2;
   }
 
   // Save the query fragments so that the plan can be visualised.
@@ -2258,5 +2260,27 @@ void ImpalaServer::UpdateFilter(TUpdateFilterResult& result,
     return;
   }
   client_request_state->UpdateFilter(params);
+}
+
+std::vector<PipelineNode> ImpalaServer::GetPipelineNodes(TUniqueId query_id) {
+  shared_ptr<ClientRequestState> client_request_state =
+      GetClientRequestState(query_id);
+  if (client_request_state.get() != nullptr) {
+    return client_request_state->profile()->GetPipelineNodes();
+  }
+  {
+    lock_guard<mutex> l(query_log_lock_);
+    QueryLogIndex::const_iterator query_record = query_log_index_.find(query_id);
+    if (query_record == query_log_index_.end()) {
+      string err = strings::Substitute("Query id $0 not found.", PrintId(query_id));
+      VLOG(1) << err;
+      return {};
+    }
+    return query_record->second->pipeline_nodes;
+  }
+}
+
+string PipelineNode::DebugString() {
+  return Substitute("$0 $1 $2 $3 $4", node_name, pipe_id, phase, start_time_us, end_time_us);
 }
 }
