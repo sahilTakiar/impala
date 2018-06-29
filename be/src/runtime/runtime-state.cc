@@ -52,6 +52,7 @@
 #include "util/jni-util.h"
 #include "util/mem-info.h"
 #include "util/pretty-printer.h"
+#include "util/runtime-profile-counters.h"
 #include "util/test-info.h"
 
 #include "common/names.h"
@@ -78,6 +79,10 @@ RuntimeState::RuntimeState(QueryState* query_state, const TPlanFragmentCtx& frag
           obj_pool(), "Fragment " + PrintId(instance_ctx.fragment_instance_id))),
     instance_buffer_reservation_(new ReservationTracker) {
   Init();
+  RuntimeProfile::Counter* now = profile_->AddCounter("UtcNow", TUnit::TIME_US);
+  int64_t now_us;
+  utc_timestamp()->UtcToUnixTimeMicros(&now_us);
+  COUNTER_SET(now, now_us);
 }
 
 // Constructor for standalone RuntimeState for test execution and fe-support.cc.

@@ -721,7 +721,7 @@ void ImpalaHttpHandler::QueryTimes(
     names.push_back(Substitute("$0:$1 ($2)", pn.node_name, pn.phase, backend));
     Value name(names.back().c_str());
     Value st(pn.start_time_us);
-    Value et(pn.end_time_us);
+    Value et(pn.end_time_us == -1 ? ps.now_us : pn.end_time_us);
     Value pipe_id(pn.pipe_id);
 
     Value quantas(kArrayType);

@@ -56,6 +56,8 @@ struct Pipeline {
 struct PipelineAnalysis {
   std::vector<Pipeline> pipelines;
   std::vector<PipelineNode> nodes;
+  // Now relative to query start time.
+  int64_t now_us = 0;
 };
 
 /// Runtime profile is a group of profiling counters.  It supports adding named counters
@@ -393,7 +395,7 @@ class RuntimeProfile { // NOLINT: This struct is not packed, but there are not s
   /// This function updates local_time_percent_ for each profile.
   void ComputeTimeInProfile();
 
-  std::vector<PipelineNode> GetPipelineNodes() const;
+  std::vector<PipelineNode> GetPipelineNodes(int64_t* utc_now) const;
 
   PipelineAnalysis GetPipelineAnalysis() const;
 

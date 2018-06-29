@@ -1203,7 +1203,7 @@ void RuntimeProfile::GetInfoStrings(InfoStrings* strs) const {
   *strs = info_strings_;
 }
 
-vector<PipelineNode> RuntimeProfile::GetPipelineNodes() const {
+vector<PipelineNode> RuntimeProfile::GetPipelineNodes(int64_t* utc_now) const {
   vector<PipelineNode> result;
   // [(enclosing finstance, profile)]
   vector<pair<string, const RuntimeProfile*>> stack;
@@ -1214,6 +1214,11 @@ vector<PipelineNode> RuntimeProfile::GetPipelineNodes() const {
     const RuntimeProfile* prof = curr.second;
     stack.pop_back();
 
+    RuntimeProfile::Counter* start = const_cast<RuntimeProfile*>(prof)->GetCounter("UtcNow");
+    if (start != nullptr) {
+      *utc_now = GetCurrentTimeMicros() - start->value();
+      LOG(INFO) << "Now: " << *utc_now;
+    }
     if (prof->name().find("Instance ") == 0) {
       finstance = prof->name();
     }
@@ -1287,7 +1292,7 @@ vector<PipelineNode> RuntimeProfile::GetPipelineNodes() const {
 
 PipelineAnalysis RuntimeProfile::GetPipelineAnalysis() const {
   PipelineAnalysis result;
-  result.nodes = GetPipelineNodes();
+  result.nodes = GetPipelineNodes(&result.now_us);
   // Map from host to pipeline info.
   map<string, Pipeline> curr_pipes;
   int curr_pipe_id = -1;
