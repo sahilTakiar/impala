@@ -109,6 +109,12 @@ void FragmentInstanceState::Cancel() {
   runtime_state_->stream_mgr()->Cancel(runtime_state_->fragment_instance_id());
 }
 
+int64_t FragmentInstanceState::GetElapsedTime() {
+  int64_t start;
+  runtime_state_->utc_timestamp()->UtcToUnixTimeMicros(&start);
+  return (GetCurrentTimeMicros() - start);
+}
+
 Status FragmentInstanceState::Prepare() {
   DCHECK(!prepared_promise_.IsSet());
   VLOG(2) << "fragment_instance_ctx:\n" << ThriftDebugString(instance_ctx_);
@@ -148,6 +154,9 @@ Status FragmentInstanceState::Prepare() {
       TUnit::UNIT,
       bind<int64_t>(mem_fn(&ThreadResourcePool::num_threads),
           runtime_state_->resource_pool()));
+  timeseries_timestamp_counter_ = profile()->AddTimeSeriesCounter("TimeSeriesTimestamp",
+      TUnit::TIME_NS, bind<int64_t>(mem_fn(&FragmentInstanceState::GetElapsedTime), this));
+
 
   // set up plan
   RETURN_IF_ERROR(ExecNode::CreateTree(

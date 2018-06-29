@@ -112,6 +112,8 @@ class FragmentInstanceState {
   /// Returns a string description of 'current_state_'.
   static string ExecStateToString(const TFInstanceExecState::type state);
 
+  int64_t GetElapsedTime();
+
   /// Name of the counter that is tracking per query, per host peak mem usage.
   /// TODO: this doesn't look like it belongs here
   static const std::string PER_HOST_PEAK_MEM_COUNTER;
@@ -249,6 +251,8 @@ class FragmentInstanceState {
 
   /// Sampled thread usage (tokens) at even time intervals.
   RuntimeProfile::TimeSeriesCounter* thread_usage_sampled_counter_ = nullptr;
+
+  RuntimeProfile::TimeSeriesCounter* timeseries_timestamp_counter_ = nullptr;
 
   /// Prepare for execution. runtime_state() will not be valid until Prepare() is called.
   /// runtime_state() will always be valid after Prepare() returns.

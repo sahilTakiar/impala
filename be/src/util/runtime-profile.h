@@ -397,6 +397,8 @@ class RuntimeProfile { // NOLINT: This struct is not packed, but there are not s
 
   std::vector<PipelineNode> GetPipelineNodes(int64_t* utc_now) const;
 
+  int64_t GetChildTime();
+
   PipelineAnalysis GetPipelineAnalysis() const;
 
  private:
@@ -521,6 +523,7 @@ class RuntimeProfile { // NOLINT: This struct is not packed, but there are not s
   static const std::string LOCAL_TIME_COUNTER_NAME;
   static const std::string INACTIVE_TIME_COUNTER_NAME;
   static const std::string INACTIVE_TIME_SERIES_NAME;
+  static const std::string CHILD_TIME_SERIES_NAME;
 
   /// Create a subtree of runtime profiles from nodes, starting at *node_idx.
   /// On return, *node_idx is the index one past the end of this subtree

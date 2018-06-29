@@ -61,6 +61,7 @@ const string RuntimeProfile::TOTAL_TIME_SERIES_NAME = "TotalTimeSeries";
 const string RuntimeProfile::LOCAL_TIME_COUNTER_NAME = "LocalTime";
 const string RuntimeProfile::INACTIVE_TIME_COUNTER_NAME = "InactiveTotalTime";
 const string RuntimeProfile::INACTIVE_TIME_SERIES_NAME = "InactiveTotalTimeSeries";
+const string RuntimeProfile::CHILD_TIME_SERIES_NAME = "ChildTimeSeries";
 
 RuntimeProfile* RuntimeProfile::Create(ObjectPool* pool, const string& name,
     bool is_averaged_profile) {
@@ -88,8 +89,12 @@ RuntimeProfile::RuntimeProfile(ObjectPool* pool, const string& name,
   }
   counter_map_[TOTAL_TIME_COUNTER_NAME] = total_time_counter;
   counter_map_[INACTIVE_TIME_COUNTER_NAME] = inactive_timer;
-  AddTimeSeriesCounter(TOTAL_TIME_SERIES_NAME, total_time_counter);
-  AddTimeSeriesCounter(INACTIVE_TIME_SERIES_NAME, inactive_timer);
+  if (!is_averaged_profile) {
+    AddTimeSeriesCounter(TOTAL_TIME_SERIES_NAME, &counter_total_time_);
+    AddTimeSeriesCounter(INACTIVE_TIME_SERIES_NAME, &inactive_timer_);
+    AddTimeSeriesCounter(CHILD_TIME_SERIES_NAME, TUnit::TIME_NS,
+        bind<int64_t>(mem_fn(&RuntimeProfile::GetChildTime), this));
+  }
 }
 
 RuntimeProfile::~RuntimeProfile() {
@@ -452,6 +457,15 @@ void RuntimeProfile::ComputeTimeInProfile(int64_t total) {
       children_[i].first->ComputeTimeInProfile(total);
     }
   }
+}
+
+int64_t RuntimeProfile::GetChildTime() {
+  int64_t total_child_time = 0;
+  lock_guard<SpinLock> l(children_lock_);
+  for (int i = 0; i < children_.size(); ++i) {
+    total_child_time += children_[i].first->total_time_counter()->value();
+  }
+  return total_child_time;
 }
 
 void RuntimeProfile::AddChild(RuntimeProfile* child, bool indent, RuntimeProfile* loc) {
