@@ -37,6 +37,7 @@ struct PipelineNode {
   std::string finstance;
   std::string node_name;
   int pipe_id;
+  int height;
   std::string phase;
   // Times are set if present in profile.
   int64_t start_time_us = -1;

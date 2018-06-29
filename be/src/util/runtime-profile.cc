@@ -1217,13 +1217,16 @@ vector<PipelineNode> RuntimeProfile::GetPipelineNodes() const {
       const string& k = entry.first;
       const string& v = entry.second;
       if (k.find("Pipe ") != 0) continue;
-      vector<string> toks;
+      vector<string> toks, v_toks;
       split(toks, k, is_any_of(" "));
+      split(v_toks, v, is_any_of(" "));
       DCHECK_EQ(2, toks.size());
+      DCHECK_EQ(2, v_toks.size());
       PipelineNode pnode;
       pnode.finstance = finstance;
       pnode.node_name = prof->name();
-      pnode.pipe_id = atoi(v.c_str());
+      pnode.pipe_id = atoi(v_toks[0].c_str());
+      pnode.height = atoi(v_toks[1].c_str());
       pnode.phase = toks[1];
       if (pnode.phase == "GETNEXT") {
         RuntimeProfile::Counter* c = const_cast<RuntimeProfile*>(prof)->GetCounter("GetNextStartTime");
@@ -1251,8 +1254,8 @@ vector<PipelineNode> RuntimeProfile::GetPipelineNodes() const {
 }
 
 string PipelineNode::DebugString() {
-  return Substitute("$0 $1 $2 $3 $4 $5", finstance, node_name, pipe_id, phase,
-      start_time_us, end_time_us);
+  return Substitute("$0 $1 pipe_id=$2 height=$3 $4 start=$5 end=$6", finstance,
+      node_name, pipe_id, height, phase, start_time_us, end_time_us);
 }
 
 }

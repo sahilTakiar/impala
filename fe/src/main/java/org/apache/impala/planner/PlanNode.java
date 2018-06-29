@@ -78,19 +78,22 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
   protected PlanNodeId id_;
 
   public static class PipelineMembership {
-    public PipelineMembership(PlanNodeId id ,TExecNodePhase phase) {
+    public PipelineMembership(PlanNodeId id, int height, TExecNodePhase phase) {
       this.id = id;
+      this.height = height;
       this.phase = phase;
     }
     public final PlanNodeId id;
+    // The height of this node in the pipeline. Starts at 0.
+    public final int height;
     public final TExecNodePhase phase;
 
     public TPipelineMembership toThrift() {
-      return new TPipelineMembership(id.asInt(), phase);
+      return new TPipelineMembership(id.asInt(), height, phase);
     }
 
     public String toString() {
-      return phase.toString() + ":" + id.toString();
+      return phase.toString() + ":" + id.toString() + ":" + height;
     }
   }
 
@@ -658,27 +661,28 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
    *
    * Returns the pipeline that this PlanNode is a part of when returning results.
    */
-  public PlanNodeId computePipelineMembership() {
+  public PipelineMembership computePipelineMembership() {
     /*Preconditions.checkState(
         children_.size() <= 1, "Plan nodes with > 1 child must override");*/
     if (children_.size() == 0) {
       // Leaf node, e.g. SCAN.
-      pipelineIds_ = Arrays.asList(new PipelineMembership(id_, TExecNodePhase.GETNEXT));
-      return id_;
+      pipelineIds_ = Arrays.asList(
+          new PipelineMembership(id_, 0, TExecNodePhase.GETNEXT));
+      return pipelineIds_.get(0);
     }
-    PlanNodeId childPipeline = children_.get(0).computePipelineMembership();
+    PipelineMembership childPipeline = children_.get(0).computePipelineMembership();
     // Default behaviour for simple blocking or streaming nodes.
     if (isBlockingNode()) {
       // Executes as root of one pipeline and leaf of another.
       pipelineIds_ = Arrays.asList(
-          new PipelineMembership(id_, TExecNodePhase.GETNEXT),
-          new PipelineMembership(childPipeline, TExecNodePhase.OPEN));
-      return id_;
+          new PipelineMembership(id_, 0, TExecNodePhase.GETNEXT),
+          new PipelineMembership(childPipeline.id, childPipeline.height + 1, TExecNodePhase.OPEN));
+      return pipelineIds_.get(0);
     } else {
       // Streaming with child, e.g. SELECT.
       pipelineIds_ = Arrays.asList(
-          new PipelineMembership(childPipeline, TExecNodePhase.GETNEXT));
-      return childPipeline;
+          new PipelineMembership(childPipeline.id, childPipeline.height + 1, TExecNodePhase.GETNEXT));
+      return pipelineIds_.get(0);
     }
   }
 

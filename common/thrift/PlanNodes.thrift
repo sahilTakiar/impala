@@ -548,7 +548,8 @@ struct TCardinalityCheckNode {
 
 struct TPipelineMembership {
   1: required Types.TPlanNodeId pipe_id
-  2: required TExecNodePhase phase
+  2: required i32 height
+  3: required TExecNodePhase phase
 }
 
 // This is essentially a union of all messages corresponding to subclasses

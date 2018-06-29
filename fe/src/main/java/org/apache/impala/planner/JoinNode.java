@@ -694,12 +694,12 @@ public abstract class JoinNode extends PlanNode {
   }
 
   @Override
-  public PlanNodeId computePipelineMembership() {
-    PlanNodeId probePipe = children_.get(0).computePipelineMembership();
-    PlanNodeId buildPipe = children_.get(1).computePipelineMembership();
+  public PipelineMembership computePipelineMembership() {
+    PipelineMembership probePipe = children_.get(0).computePipelineMembership();
+    PipelineMembership buildPipe = children_.get(1).computePipelineMembership();
     pipelineIds_ = Arrays.asList(
-        new PipelineMembership(probePipe, TExecNodePhase.GETNEXT),
-        new PipelineMembership(buildPipe, TExecNodePhase.OPEN));
+        new PipelineMembership(probePipe.id, probePipe.height + 1, TExecNodePhase.GETNEXT),
+        new PipelineMembership(buildPipe.id, probePipe.height + 1, TExecNodePhase.OPEN));
     return probePipe;
   }
 }

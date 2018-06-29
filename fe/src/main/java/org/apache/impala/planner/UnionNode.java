@@ -326,13 +326,13 @@ public class UnionNode extends PlanNode {
   }
 
   @Override
-  public PlanNodeId computePipelineMembership() {
+  public PipelineMembership computePipelineMembership() {
     // TODO: not sure what to do here - handle each union branch as a separate pipeline?
     for (PlanNode child: children_) {
       child.computePipelineMembership();
     }
     pipelineIds_ = Arrays.asList(
-        new PipelineMembership(id_, TExecNodePhase.GETNEXT));
-    return id_;
+        new PipelineMembership(id_, 0, TExecNodePhase.GETNEXT));
+    return pipelineIds_.get(0);
   }
 }
