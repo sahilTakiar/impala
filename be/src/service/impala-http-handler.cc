@@ -225,10 +225,6 @@ void ImpalaHttpHandler::QueryProfileHandler(const Webserver::ArgumentMap& args,
     return;
   }
 
-  LOG(INFO) << "PIPE";
-  server_->GetPipelineAnalysis(unique_id);
-  LOG(INFO) << "PIPE DONE";
-
   Value profile(ss.str().c_str(), document->GetAllocator());
   document->AddMember("profile", profile, document->GetAllocator());
   document->AddMember("query_id", args.find("query_id")->second.c_str(),
@@ -706,8 +702,29 @@ void ImpalaHttpHandler::QueryTimes(
   Value v(kObjectType);
   TUniqueId query_id;
   Status status = ParseIdFromArguments(args, &query_id, "query_id");
+  PipelineAnalysis ps = server_->GetPipelineAnalysis(query_id);
+
   Value query_id_val(PrintId(query_id).c_str(), document->GetAllocator());
   document->AddMember("query_id", query_id_val, document->GetAllocator());
+
+  vector<string> names;
+
+  Value nodes(kArrayType);
+  for (PipelineNode pn : ps.nodes) {
+    Value lane(kObjectType);
+    names.push_back(Substitute("$0:$1:2 ($3)",
+        pn.pipe_id, pn.node_name, pn.phase, pn.finstance));
+    LOG(INFO) << "NAME" << names.back();
+    Value name(names.back().c_str());
+    Value st(pn.start_time_us);
+    Value et(pn.end_time_us);
+    lane.AddMember("name", name, document->GetAllocator());
+    lane.AddMember("start_time", st, document->GetAllocator());
+    lane.AddMember("end_time", et, document->GetAllocator());
+    nodes.PushBack(lane, document->GetAllocator());
+  }
+  v.AddMember("nodes", nodes, document->GetAllocator());
+
   {
     Value times(kArrayType);
     for (int i = 0; i <= 100; i += 10) {
