@@ -712,13 +712,20 @@ void ImpalaHttpHandler::QueryTimes(
   Value nodes(kArrayType);
   for (PipelineNode pn : ps.nodes) {
     Value lane(kObjectType);
-    names.push_back(Substitute("$0:$1:2 ($3)",
-        pn.pipe_id, pn.node_name, pn.phase, pn.finstance));
+    string backend = pn.finstance;
+    size_t host_idx = backend.find("host=");
+    if (host_idx != string::npos) {
+      size_t host_end = backend.find(")", host_idx);
+      backend = backend.substr(host_idx + 5, host_end - host_idx - 5);
+    }
+    names.push_back(Substitute("$0:$1 ($2)", pn.node_name, pn.phase, backend));
     LOG(INFO) << "NAME" << names.back();
     Value name(names.back().c_str());
     Value st(pn.start_time_us);
     Value et(pn.end_time_us);
+    Value pipe_id(pn.pipe_id);
     lane.AddMember("name", name, document->GetAllocator());
+    lane.AddMember("pipe_id", pipe_id, document->GetAllocator());
     lane.AddMember("start_time", st, document->GetAllocator());
     lane.AddMember("end_time", et, document->GetAllocator());
     nodes.PushBack(lane, document->GetAllocator());
