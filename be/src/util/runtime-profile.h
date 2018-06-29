@@ -501,8 +501,10 @@ class RuntimeProfile { // NOLINT: This struct is not packed, but there are not s
 
   /// Name of the counter maintaining the total time.
   static const std::string TOTAL_TIME_COUNTER_NAME;
+  static const std::string TOTAL_TIME_SERIES_NAME;
   static const std::string LOCAL_TIME_COUNTER_NAME;
   static const std::string INACTIVE_TIME_COUNTER_NAME;
+  static const std::string INACTIVE_TIME_SERIES_NAME;
 
   /// Create a subtree of runtime profiles from nodes, starting at *node_idx.
   /// On return, *node_idx is the index one past the end of this subtree

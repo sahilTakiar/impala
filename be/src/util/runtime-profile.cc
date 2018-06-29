@@ -56,8 +56,10 @@ static const string THREAD_INVOLUNTARY_CONTEXT_SWITCHES = "InvoluntaryContextSwi
 static const string ROOT_COUNTER = "";
 
 const string RuntimeProfile::TOTAL_TIME_COUNTER_NAME = "TotalTime";
+const string RuntimeProfile::TOTAL_TIME_SERIES_NAME = "TotalTimeSeries";
 const string RuntimeProfile::LOCAL_TIME_COUNTER_NAME = "LocalTime";
 const string RuntimeProfile::INACTIVE_TIME_COUNTER_NAME = "InactiveTotalTime";
+const string RuntimeProfile::INACTIVE_TIME_SERIES_NAME = "InactiveTotalTimeSeries";
 
 RuntimeProfile* RuntimeProfile::Create(ObjectPool* pool, const string& name,
     bool is_averaged_profile) {
@@ -85,10 +87,14 @@ RuntimeProfile::RuntimeProfile(ObjectPool* pool, const string& name,
   }
   counter_map_[TOTAL_TIME_COUNTER_NAME] = total_time_counter;
   counter_map_[INACTIVE_TIME_COUNTER_NAME] = inactive_timer;
+  AddTimeSeriesCounter(TOTAL_TIME_SERIES_NAME, total_time_counter);
+  AddTimeSeriesCounter(INACTIVE_TIME_SERIES_NAME, inactive_timer);
 }
 
 RuntimeProfile::~RuntimeProfile() {
-  DCHECK(!has_active_periodic_counters_);
+  if (has_active_periodic_counters_) {
+    StopPeriodicCounters();
+  }
 }
 
 void RuntimeProfile::StopPeriodicCounters() {
