@@ -719,15 +719,30 @@ void ImpalaHttpHandler::QueryTimes(
       backend = backend.substr(host_idx + 5, host_end - host_idx - 5);
     }
     names.push_back(Substitute("$0:$1 ($2)", pn.node_name, pn.phase, backend));
-    LOG(INFO) << "NAME" << names.back();
     Value name(names.back().c_str());
     Value st(pn.start_time_us);
     Value et(pn.end_time_us);
     Value pipe_id(pn.pipe_id);
+
+    Value quantas(kArrayType);
+    for (int i = 0; i < 5; ++i) {
+      Value quanta(kObjectType);
+      Value qst(pn.start_time_us + (pn.end_time_us - pn.start_time_us) / 5 * i);
+      Value qet(pn.start_time_us + (pn.end_time_us - pn.start_time_us) / 5 * (i + 1));
+      Value pct(((double)rand()) / RAND_MAX);
+      quanta.AddMember("start_time", qst, document->GetAllocator());
+      quanta.AddMember("end_time", qet, document->GetAllocator());
+      quanta.AddMember("active_pct", pct, document->GetAllocator());
+      quantas.PushBack(quanta, document->GetAllocator());
+    }
+
     lane.AddMember("name", name, document->GetAllocator());
     lane.AddMember("pipe_id", pipe_id, document->GetAllocator());
     lane.AddMember("start_time", st, document->GetAllocator());
     lane.AddMember("end_time", et, document->GetAllocator());
+    lane.AddMember("quantas", quantas, document->GetAllocator());
+
+
     nodes.PushBack(lane, document->GetAllocator());
   }
   v.AddMember("nodes", nodes, document->GetAllocator());
