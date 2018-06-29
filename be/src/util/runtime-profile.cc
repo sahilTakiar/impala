@@ -1221,7 +1221,7 @@ vector<PipelineNode> RuntimeProfile::GetPipelineNodes() const {
       PipelineNode pnode;
       pnode.finstance = finstance;
       pnode.node_name = prof->name();
-      pnode.pipe_id = -2;
+      pnode.pipe_id = 99999;
       pnode.height = 0;
       pnode.phase = "CODEGEN";
       RuntimeProfile::Counter* c = const_cast<RuntimeProfile*>(prof)->GetCounter("CodegenStartTime");
