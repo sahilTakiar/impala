@@ -194,6 +194,10 @@ void ExecNode::Close(RuntimeState* state) {
   if (is_closed_) return;
   is_closed_ = true;
 
+  // Sometimes the parent stops calling GetNext() because it hit a limit.
+  // Make sure there is an end time.
+  SetGetNextEndTime(state);
+
   if (rows_returned_counter_ != NULL) {
     COUNTER_SET(rows_returned_counter_, num_rows_returned_);
   }
