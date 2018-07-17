@@ -747,7 +747,7 @@ void ImpalaHttpHandler::QueryTimes(
   }
   v.AddMember("nodes", nodes, document->GetAllocator());
 
-  {
+/*  {
     Value times(kArrayType);
     for (int i = 0; i <= 100; i += 10) {
       Value val(i);
@@ -762,7 +762,7 @@ void ImpalaHttpHandler::QueryTimes(
       times.PushBack(val, document->GetAllocator());
     }
     v.AddMember("Sink", times, document->GetAllocator());
-  }
+  }*/
   document->AddMember("data", v, document->GetAllocator());
 }
 

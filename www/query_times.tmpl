@@ -69,12 +69,21 @@ under the License.
            type: 'number',
            id: 'End'
          });
+
+         dataTable.addColumn({ type: 'string', role: 'style' });
          var options = {
-           colors: [],
+          // colors: [],
          };
-         for (var node in obj) {
+         for (var itr in obj.nodes) {
+           var node = obj.nodes[itr];
            var quanta = 0;
-           for (var i in obj[node]) {
+           if(node.start_time < 0) {
+            dataTable.addRow([node.name,node.pipe_id+"", node.end_time/1000, node.end_time/1000,"opacity: 0"]);
+            continue;
+           // alert(JSON.stringify(node));
+           }
+           dataTable.addRow([node.name,node.pipe_id+"", node.start_time/1000, node.end_time/1000,""]);
+/*           for (var i in obj[node]) {
              var time_data = obj[node]
              if (time_data[i] == -1) {
                quanta += 100;
@@ -85,7 +94,7 @@ under the License.
              var white_intensity = Math.floor(254 * ((100-time_data[i])/100));
              options.colors.push('rgb(254,'+white_intensity+','+white_intensity+')');
              //alert(options.colors);
-           }
+           }*/
          }
          chart.draw(dataTable, options);
        }
