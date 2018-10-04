@@ -432,3 +432,15 @@ PLAN-ROOT SINK
 01:SCAN HDFS [functional.alltypes]
    partitions=24/24 files=24 size=478.45KB
 ====
+# test that a value of 0 always disables topn
+set topn_bytes_limit=0;
+select int_col from functional.alltypes order by 1 limit 1
+---- PLAN
+---- DISTRIBUTEDPLAN
+====
+# test that offset is taken into account
+set topn_bytes_limit=6;
+select int_col from functional.alltypes order by 1 limit 1 offset 1
+---- PLAN
+---- DISTRIBUTEDPLAN
+====

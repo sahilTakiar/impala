@@ -714,6 +714,18 @@ Status impala::SetQueryOption(const string& key, const string& value,
         query_options->__set_cpu_limit_s(cpu_limit_s);
         break;
       }
+      case TImpalaQueryOptions::TOPN_BYTES_LIMIT: {
+        StringParser::ParseResult result;
+        const int64_t topn_bytes_limit =
+                StringParser::StringToInt<int64_t>(value.c_str(), value.length(), &result);
+        if (result != StringParser::PARSE_SUCCESS || topn_bytes_limit < 0) {
+          return Status(
+                  Substitute("Invalid TopN bytes limit: '$0'. "
+                             "Only non-negative numbers are allowed.", value));
+        }
+        query_options->__set_topn_bytes_limit(topn_bytes_limit);
+        break;
+      }
       default:
         if (IsRemovedQueryOption(key)) {
           LOG(WARNING) << "Ignoring attempt to set removed query option '" << key << "'";

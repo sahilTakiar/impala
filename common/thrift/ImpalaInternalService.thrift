@@ -304,6 +304,10 @@ struct TQueryOptions {
 
   // See comment in ImpalaService.thrift.
   72: optional i64 cpu_limit_s = 0;
+
+  // See comment in ImpalaService.thrift
+  // The default value is set to 32 mb based on empirical data
+  73: optional i64 topn_bytes_limit = 32000000;
 }
 
 // Impala currently has two types of sessions: Beeswax and HiveServer2

@@ -295,10 +295,22 @@ public class SingleNodePlanner {
 
     if (stmt.evaluateOrderBy() && sortHasMaterializedSlots) {
       long limit = stmt.getLimit();
-      // TODO: External sort could be used for very large limits
-      // not just unlimited order-by
       boolean useTopN = stmt.hasLimit() && !disableTopN;
-      if (useTopN) {
+
+      // Add a Sort Node instead of a TopN Node if the estimated size of the materialized
+      // rows for TopN exceeds the value of TOPN_BYTES_LIMIT
+      long estimatedTopNMaterializedSize = 0;
+      for (SlotDescriptor sortSlotDesc:
+              stmt.getSortInfo().getSortTupleDescriptor().getSlots()) {
+        if (sortSlotDesc.isMaterialized()) {
+          stmt.getSortInfo().getSortTupleDescriptor().computeMemLayout();
+          estimatedTopNMaterializedSize += sortSlotDesc.getByteSize();
+        }
+      }
+
+      estimatedTopNMaterializedSize *= (limit + stmt.getOffset());
+
+      if (useTopN && estimatedTopNMaterializedSize < ctx_.getQueryOptions().topn_bytes_limit) {
         root = SortNode.createTopNSortNode(
             ctx_.getNextNodeId(), root, stmt.getSortInfo(), stmt.getOffset());
       } else {
