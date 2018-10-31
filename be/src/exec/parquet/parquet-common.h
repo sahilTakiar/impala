@@ -181,7 +181,7 @@ class ParquetPlainEncoder {
     }
   }
 
-  /// Decodes t from 'buffer', reading up to the byte before 'buffer_end'. 'buffer'
+  /// Decodes 'v' from 'buffer', reading up to the byte before 'buffer_end'. 'buffer'
   /// need not be aligned. If PARQUET_TYPE is FIXED_LEN_BYTE_ARRAY then 'fixed_len_size'
   /// is the size of the object. Otherwise, it is unused.
   /// Returns the number of bytes read or -1 if the value was not decoded successfully.

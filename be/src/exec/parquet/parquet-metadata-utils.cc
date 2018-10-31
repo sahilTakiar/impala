@@ -214,13 +214,13 @@ Status ParquetMetadataUtils::ValidateColumn(const char* filename,
   if (slot_desc->type().type == TYPE_DECIMAL) {
     // TODO: allow converting to wider type (IMPALA-2515)
     if (schema_element.type == parquet::Type::INT32 &&
-        sizeof(int32_t) != slot_desc->type().GetByteSize()) {
+        sizeof(int32_t) > slot_desc->type().GetByteSize()) {
       return Status(Substitute("File '$0' decimal column '$1' is stored as INT32, but "
           "based on the precision in the table metadata, another type would needed.",
           filename, schema_element.name));
     }
     if (schema_element.type == parquet::Type::INT64 &&
-        sizeof(int64_t) != slot_desc->type().GetByteSize()) {
+        sizeof(int64_t) > slot_desc->type().GetByteSize()) {
       return Status(Substitute("File '$0' decimal column '$1' is stored as INT64, but "
           "based on the precision in the table metadata, another type would needed.",
           filename, schema_element.name));
@@ -233,7 +233,7 @@ Status ParquetMetadataUtils::ValidateColumn(const char* filename,
       }
 
       int expected_len = ParquetPlainEncoder::DecimalSize(slot_desc->type());
-      if (schema_element.type_length != expected_len) {
+      if (schema_element.type_length > expected_len) {
         return Status(Substitute("File '$0' column '$1' has an invalid type length. "
             "Expecting: $2 len in file: $3", filename, schema_element.name, expected_len,
             schema_element.type_length));
@@ -244,7 +244,7 @@ Status ParquetMetadataUtils::ValidateColumn(const char* filename,
           filename, schema_element.name));
     }
 
-    if (schema_element.scale != slot_desc->type().scale) {
+    if (schema_element.scale > slot_desc->type().scale) {
       // TODO: we could allow a mismatch and do a conversion at this step.
       return Status(Substitute("File '$0' column '$1' has a scale that does not match "
           "the table metadata scale. File metadata scale: $2 Table metadata scale: $3",
@@ -256,7 +256,7 @@ Status ParquetMetadataUtils::ValidateColumn(const char* filename,
       ErrorMsg msg(TErrorCode::PARQUET_MISSING_PRECISION, filename, schema_element.name);
       RETURN_IF_ERROR(state->LogOrReturnError(msg));
     } else {
-      if (schema_element.precision != slot_desc->type().precision) {
+      if (schema_element.precision > slot_desc->type().precision) {
         // TODO: we could allow a mismatch and do a conversion at this step.
         ErrorMsg msg(TErrorCode::PARQUET_WRONG_PRECISION, filename, schema_element.name,
             schema_element.precision, slot_desc->type().precision);

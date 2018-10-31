@@ -804,6 +804,50 @@ class TestParquet(ImpalaTestSuite):
     self.run_test_case(
         'QueryTest/parquet-int64-timestamps', vector, unique_database)
 
+  def test_decimal_precision_and_scale_widening(self, vector, unique_database):
+    """IMPALA-7087
+    """
+    binary_decimal_test_files =\
+        ["testdata/data/binary_decimal_precision_and_scale_widening.parquet"]
+
+    create_table_and_copy_files(self.client, """create table if not exists {db}.{tbl}
+        (small_dec decimal(38,2), med_dec decimal(38,2), large_dec decimal(38,2))
+        STORED AS PARQUET""", unique_database, "binary_decimal_precision_widening",
+        binary_decimal_test_files)
+
+    create_table_and_copy_files(self.client, """create table if not exists {db}.{tbl}
+        (small_dec decimal(9,4), med_dec decimal(18,4), large_dec decimal(38,4))
+        STORED AS PARQUET""", unique_database, "binary_decimal_scale_widening",
+        binary_decimal_test_files)
+
+    create_table_and_copy_files(self.client, """create table if not exists {db}.{tbl}
+        (small_dec decimal(38,4), med_dec decimal(38,4), large_dec decimal(38,4))
+        STORED AS PARQUET""", unique_database,
+        "binary_decimal_precision_and_scale_widening", binary_decimal_test_files)
+
+    create_table_and_copy_files(self.client, """create table if not exists {db}.{tbl}
+        (team string, score decimal(12, 6)) STORED AS PARQUET""", unique_database,
+        "int32_decimal_precision_and_scale_widening",
+        ["testdata/data/decimal_stored_as_int32.parquet"])
+
+    create_table_and_copy_files(self.client, """create table if not exists {db}.{tbl}
+        (team string, score decimal(32, 8)) STORED AS PARQUET""", unique_database,
+        "int64_decimal_precision_and_scale_widening",
+        ["testdata/data/decimal_stored_as_int64.parquet"])
+
+    self.run_test_case("QueryTest/parquet-decimal-precision-and-scale-widening", vector,
+                       unique_database)
+
+  def test_decimal_scale_widening_overflow(self, vector, unique_database):
+    TABLE_NAME = "decimal_precision_and_scale_widening"
+    test_files = ["testdata/data/binary_decimal_no_dictionary.parquet"]
+    create_table_and_copy_files(self.client, """create table if not exists {db}.{tbl}
+        (small_dec decimal(9,4), med_dec decimal(18,4), large_dec decimal(38,4))
+         STORED AS PARQUET""", unique_database, TABLE_NAME, test_files)
+    self.run_test_case("QueryTest/parquet-decimal-precision-and-scale-widening", vector,
+                       unique_database)
+
+
 # We use various scan range lengths to exercise corner cases in the HDFS scanner more
 # thoroughly. In particular, it will exercise:
 # 1. default scan range

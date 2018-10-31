@@ -373,6 +373,10 @@ error_codes = (
 
   ("PARQUET_CORRUPT_BOOL_VALUE", 122, "File '$0' is corrupt: error decoding BOOLEAN "
    "value with encoding $1 at offset $2"),
+
+  ("PARQUET_SCALE_CONVERSION_OVERFLOW", 123,
+   "Parquet file '$0' column '$1' could not be read into table column '$2': overflow "
+   "when converting Parquet file scale '$3' to table scale '$4' for byte offset '$5'."),
 )
 
 import sys

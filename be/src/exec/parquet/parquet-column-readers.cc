@@ -32,6 +32,8 @@
 #include "exec/scanner-context.inline.h"
 #include "parquet-collection-column-reader.h"
 #include "rpc/thrift-util.h"
+#include "runtime/collection-value-builder.h"
+#include "runtime/decimal-value.inline.h"
 #include "runtime/exec-env.h"
 #include "runtime/io/disk-io-mgr.h"
 #include "runtime/io/request-context.h"
@@ -232,6 +234,16 @@ class ScalarColumnReader : public BaseScalarColumnReader {
   inline ALWAYS_INLINE bool DecodeValues(
       int64_t stride, int64_t count, InternalType* RESTRICT out_vals) RESTRICT;
 
+  /// Called by ConvertSlot to handle scale conversion for decimal types. Attempts to
+  /// increase the scale of the slot from the scale the Parquet file was written with to
+  /// the scale of the SlotDescriptor. Returns false if the slot could not be converted.
+  /// InputType is a DecimalValue (either Decimal4Value, Decimal8Value, or
+  /// Decimal16Value).
+  template <typename DecimalType>
+  inline ALWAYS_INLINE bool ConvertDecimalScale(const DecimalType* src, void* slot);
+
+  inline ALWAYS_INLINE bool ConvertDecimalPrecision(const InternalType* src, void* slot);
+
   /// Most column readers never require conversion, so we can avoid branches by
   /// returning constant false. Column readers for types that require conversion
   /// must specialize this function.
@@ -334,6 +346,10 @@ ScalarColumnReader<InternalType, PARQUET_TYPE, MATERIALIZED>::ScalarColumnReader
   }
   if (slot_desc_->type().type == TYPE_BOOLEAN) {
     bool_decoder_ = make_unique<ParquetBoolDecoder>();
+  }
+  if (slot_desc_->type().type == TYPE_DECIMAL) {
+    needs_conversion_ = slot_desc_->type().scale != node.element->scale
+        || slot_desc_->type().precision != node.element->precision;
   }
 }
 
@@ -945,6 +961,169 @@ bool ScalarColumnReader<TimestampValue, parquet::Type::INT64, true>::ValidateVal
   return true;
 }
 
+template <typename InternalType, parquet::Type::type PARQUET_TYPE, bool MATERIALIZED>
+inline bool ScalarColumnReader<InternalType, PARQUET_TYPE,
+    MATERIALIZED>::ConvertDecimalPrecision(const InternalType *src, void *slot) {
+  DCHECK(slot_desc() != nullptr);
+  DCHECK(slot_desc()->type().type == TYPE_DECIMAL);
+
+  auto dst_dec4 = reinterpret_cast<InternalType*>(slot);
+  *dst_dec4 = *src;
+  bool overflow;
+
+  switch (slot_desc()->type().GetByteSize()) {
+    case 16: {
+      Decimal16Value* dst_dec16 = reinterpret_cast<Decimal16Value*>(slot);
+      *dst_dec16 = ToDecimal16(*dst_dec4, &overflow);
+    } break;
+    case 8: {
+      Decimal8Value* dst_dec8 = reinterpret_cast<Decimal8Value*>(slot);
+      *dst_dec8 = ToDecimal8(*dst_dec4, &overflow);
+    } break;
+  }
+  return true;
+}
+
+template <typename InternalType, parquet::Type::type PARQUET_TYPE, bool MATERIALIZED>
+template <typename DecimalType>
+inline bool ScalarColumnReader<InternalType, PARQUET_TYPE,
+    MATERIALIZED>::ConvertDecimalScale(const DecimalType *src, void *slot) {
+  DCHECK(slot_desc() != nullptr);
+  DCHECK(slot_desc()->type().type == TYPE_DECIMAL);
+  auto dst_dec = reinterpret_cast<DecimalType*>(slot);
+  *dst_dec = *src;
+  int parquet_file_scale = node_.element->scale;
+  int slot_scale = slot_desc()->type().scale;
+  bool overflow;
+  *dst_dec = dst_dec->ScaleTo(
+      parquet_file_scale, slot_scale, slot_desc()->type().precision, &overflow);
+  if (UNLIKELY(overflow)) {
+    parent_->parse_status_ = Status(TErrorCode::PARQUET_SCALE_CONVERSION_OVERFLOW,
+        filename(), node_.element->name, slot_desc()->type().DebugString(),
+        parquet_file_scale, slot_scale, stream_->file_offset());
+    return false;
+  }
+  return true;
+}
+
+template <>
+inline bool ScalarColumnReader<Decimal4Value, parquet::Type::BYTE_ARRAY,
+    true>::NeedsConversionInline() const {
+  return needs_conversion_;
+}
+
+template <>
+bool ScalarColumnReader<Decimal4Value, parquet::Type::BYTE_ARRAY, true>::ConvertSlot(
+    const Decimal4Value* src, void* slot) {
+  return ConvertDecimalScale<Decimal4Value>(src, slot);
+}
+
+template <>
+inline bool ScalarColumnReader<Decimal8Value, parquet::Type::BYTE_ARRAY,
+    true>::NeedsConversionInline() const {
+  return needs_conversion_;
+}
+
+template <>
+bool ScalarColumnReader<Decimal8Value, parquet::Type::BYTE_ARRAY, true>::ConvertSlot(
+    const Decimal8Value* src, void* slot) {
+  return ConvertDecimalScale<Decimal8Value>(src, slot);
+}
+
+template <>
+inline bool ScalarColumnReader<Decimal16Value, parquet::Type::BYTE_ARRAY,
+    true>::NeedsConversionInline() const {
+  return needs_conversion_;
+}
+
+template <>
+bool ScalarColumnReader<Decimal16Value, parquet::Type::BYTE_ARRAY, true>::ConvertSlot(
+    const Decimal16Value* src, void* slot) {
+  return ConvertDecimalScale<Decimal16Value>(src, slot);
+}
+
+template <>
+inline bool ScalarColumnReader<Decimal4Value, parquet::Type::FIXED_LEN_BYTE_ARRAY,
+    true>::NeedsConversionInline() const {
+  return needs_conversion_;
+}
+
+template <>
+bool ScalarColumnReader<Decimal4Value, parquet::Type::FIXED_LEN_BYTE_ARRAY,
+    true>::ConvertSlot(const Decimal4Value* src, void* slot) {
+  return ConvertDecimalScale<Decimal4Value>(src, slot);
+}
+
+template <>
+inline bool ScalarColumnReader<Decimal8Value, parquet::Type::FIXED_LEN_BYTE_ARRAY,
+    true>::NeedsConversionInline() const {
+  return needs_conversion_;
+}
+
+template <>
+bool ScalarColumnReader<Decimal8Value, parquet::Type::FIXED_LEN_BYTE_ARRAY,
+    true>::ConvertSlot(const Decimal8Value* src, void* slot) {
+  return ConvertDecimalScale<Decimal8Value>(src, slot);
+}
+
+template <>
+inline bool ScalarColumnReader<Decimal16Value, parquet::Type::FIXED_LEN_BYTE_ARRAY,
+    true>::NeedsConversionInline() const {
+  return needs_conversion_;
+}
+
+template <>
+bool ScalarColumnReader<Decimal16Value, parquet::Type::FIXED_LEN_BYTE_ARRAY,
+    true>::ConvertSlot(const Decimal16Value* src, void* slot) {
+  return ConvertDecimalScale<Decimal16Value>(src, slot);
+}
+
+template <>
+inline bool ScalarColumnReader<Decimal4Value, parquet::Type::INT32,
+    true>::NeedsConversionInline() const {
+  return needs_conversion_;
+}
+
+template <>
+bool ScalarColumnReader<Decimal4Value, parquet::Type::INT32, true>::ConvertSlot(
+    const Decimal4Value* src, void* slot) {
+  bool ret = ConvertDecimalPrecision(src, slot);
+
+  if (ret) {
+    switch (slot_desc()->type().GetByteSize()) {
+      case 16: {
+        Decimal16Value* dst_ts3 = reinterpret_cast<Decimal16Value*>(slot);
+        ret = ConvertDecimalScale<Decimal16Value>(dst_ts3, slot);
+      } break;
+      case 8: {
+        Decimal8Value* dst_ts4 = reinterpret_cast<Decimal8Value*>(slot);
+        ret = ConvertDecimalScale<Decimal8Value>(dst_ts4, slot);
+      } break;
+    }
+  }
+  return ret;
+}
+
+template <>
+inline bool ScalarColumnReader<Decimal8Value, parquet::Type::INT64,
+    true>::NeedsConversionInline() const {
+  return needs_conversion_;
+}
+
+template <>
+bool ScalarColumnReader<Decimal8Value, parquet::Type::INT64, true>::ConvertSlot(
+    const Decimal8Value* src, void* slot) {
+  bool ret = ConvertDecimalPrecision(src, slot);
+
+  if (ret) {
+    switch (slot_desc()->type().GetByteSize()) {
+      case 16:
+        Decimal16Value* dst_ts3 = reinterpret_cast<Decimal16Value*>(slot);
+        ret = ConvertDecimalScale<Decimal16Value>(dst_ts3, slot);
+    }
+  }
+  return ret;
+}
 // In 1.1, we had a bug where the dictionary page metadata was not set. Returns true
 // if this matches those versions and compatibility workarounds need to be used.
 static bool RequiresSkippedDictionaryHeaderCheck(
@@ -1506,13 +1685,32 @@ static ParquetColumnReader* CreateDecimalColumnReader(
       }
       break;
     case parquet::Type::INT32:
-      DCHECK_EQ(sizeof(Decimal4Value::StorageType), slot_desc->type().GetByteSize());
+      //DCHECK_EQ(sizeof(Decimal4Value::StorageType), slot_desc->type().GetByteSize());
       return new ScalarColumnReader<Decimal4Value, parquet::Type::INT32, true>(
           parent, node, slot_desc);
+//      switch (slot_desc->type().GetByteSize()) {
+//        case 4:
+//          return new ScalarColumnReader<Decimal4Value, parquet::Type::INT32, true>(
+//                  parent, node, slot_desc);
+//        case 8:
+//          return new ScalarColumnReader<Decimal8Value, parquet::Type::INT32, true>(
+//                  parent, node, slot_desc);
+//        case 16:
+//          return new ScalarColumnReader<Decimal16Value, parquet::Type::INT32, true>(
+//                  parent, node, slot_desc);
+//      }
     case parquet::Type::INT64:
-      DCHECK_EQ(sizeof(Decimal8Value::StorageType), slot_desc->type().GetByteSize());
+      //DCHECK_EQ(sizeof(Decimal8Value::StorageType), slot_desc->type().GetByteSize());
       return new ScalarColumnReader<Decimal8Value, parquet::Type::INT64, true>(
           parent, node, slot_desc);
+//      switch (slot_desc->type().GetByteSize()) {
+//        case 8:
+//          return new ScalarColumnReader<Decimal8Value, parquet::Type::INT64, true>(
+//                  parent, node, slot_desc);
+//        case 16:
+//          return new ScalarColumnReader<Decimal16Value, parquet::Type::INT64, true>(
+//                  parent, node, slot_desc);
+//      }
     default:
       DCHECK(false) << "Invalid decimal primitive type";
   }
