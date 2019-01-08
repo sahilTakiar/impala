@@ -271,6 +271,16 @@ public class LocalFsTable extends LocalTable implements FeFsTable {
   }
 
   @Override
+  public FileSystemUtil.FsType getFsType() {
+    Preconditions.checkNotNull(getHdfsBaseDir(),
+            "LocalTable base dir is null");
+    Path hdfsBaseDirPath = new Path(getHdfsBaseDir());
+    Preconditions.checkNotNull(hdfsBaseDirPath.toUri().getScheme(),
+        "Cannot get scheme from path " + getHdfsBaseDir());
+    return FileSystemUtil.FsType.getFsType(hdfsBaseDirPath.toUri().getScheme());
+  }
+
+  @Override
   public TTableDescriptor toThriftDescriptor(int tableId,
       Set<Long> referencedPartitions) {
     if (referencedPartitions == null) {
