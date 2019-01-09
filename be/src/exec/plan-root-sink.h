@@ -88,6 +88,10 @@ class PlanRootSink : public DataSink {
 
   static const std::string NAME;
 
+  /// Blocks until the first non-empty batch of rows have been sent. If Send has already
+  /// been called then this method returns immediately.
+  void HasSentRows();
+
  private:
   /// Protects all members, including the condition variables.
   boost::mutex lock_;
@@ -102,6 +106,17 @@ class PlanRootSink : public DataSink {
   /// request for rows. Also signalled by FlushFinal(), Close() and Cancel() to unblock
   /// the consumer.
   ConditionVariable consumer_cv_;
+
+  /// Set to true once the first call to Send has been invoked by the fragment instance
+  AtomicBool hasSentRows;
+
+  /// Protects access to the hasSentRowsCondition variable
+  boost::mutex hasSentRowsLock;
+
+  /// Allows owners of PlanRootSinks to wait the first batch of rows is ready for
+  /// consumption via GetNext(). This variable is notified during the first call to Send()
+  /// that contains a non-empty RowBatch.
+  ConditionVariable hasSentRowsCondition;
 
   /// State of the sender:
   /// - ROWS_PENDING: the sender is still producing rows; the only non-terminal state

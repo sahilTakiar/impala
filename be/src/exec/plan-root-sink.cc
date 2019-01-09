@@ -67,6 +67,14 @@ void ValidateCollectionSlots(const RowDescriptor& row_desc, RowBatch* batch) {
 Status PlanRootSink::Send(RuntimeState* state, RowBatch* batch) {
   SCOPED_TIMER(profile()->total_time_counter());
   ValidateCollectionSlots(*row_desc_, batch);
+
+  // If this the first time Send has been called updated hasSentRows and notify and
+  // threads waiting on the hasSentRowsCondition
+  if (!hasSentRows.Load() && batch->num_rows() != 0) {
+    hasSentRows.Store(true);
+    hasSentRowsCondition.NotifyAll();
+  }
+
   int current_batch_row = 0;
 
   // Don't enter the loop if batch->num_rows() == 0; no point triggering the consumer with
@@ -141,5 +149,12 @@ Status PlanRootSink::GetNext(
 
   *eos = sender_state_ == SenderState::EOS;
   return state->GetQueryStatus();
+}
+
+void PlanRootSink::HasSentRows() {
+  if (!hasSentRows.Load()) {
+    unique_lock<mutex> l(hasSentRowsLock);
+    hasSentRowsCondition.Wait(l);
+  }
 }
 }

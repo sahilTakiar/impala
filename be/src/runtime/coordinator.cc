@@ -619,8 +619,12 @@ Status Coordinator::Wait() {
 
   if (stmt_type_ == TStmtType::QUERY) {
     DCHECK(coord_instance_ != nullptr);
-    return UpdateExecState(coord_instance_->WaitForOpen(),
+    Status status = UpdateExecState(coord_instance_->WaitForOpen(),
         &coord_instance_->runtime_state()->fragment_instance_id(), FLAGS_hostname);
+    if (status.ok()) {
+      coord_sink_->HasSentRows();
+    }
+    return status;
   }
   DCHECK_EQ(stmt_type_, TStmtType::DML);
   // DML finalization can only happen when all backends have completed all side-effects
