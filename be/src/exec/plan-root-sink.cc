@@ -36,6 +36,7 @@ namespace impala {
 PlanRootSink::PlanRootSink(
     TDataSinkId sink_id, const RowDescriptor* row_desc, RuntimeState* state)
   : DataSink(sink_id, row_desc, "PLAN_ROOT_SINK", state),
+    query_results_(1024), 
     num_rows_produced_limit_(state->query_options().num_rows_produced_limit) {}
 
 namespace {
@@ -69,7 +70,6 @@ void ValidateCollectionSlots(const RowDescriptor& row_desc, RowBatch* batch) {
 Status PlanRootSink::Send(RuntimeState* state, RowBatch* batch) {
   SCOPED_TIMER(profile()->total_time_counter());
   ValidateCollectionSlots(*row_desc_, batch);
-  int current_batch_row = 0;
 
   // Check to ensure that the number of rows produced by query execution does not exceed
   // rows_returned_limit_. Since the PlanRootSink has a single producer, the
@@ -83,77 +83,113 @@ Status PlanRootSink::Send(RuntimeState* state, RowBatch* batch) {
     return err;
   }
 
-  // Don't enter the loop if batch->num_rows() == 0; no point triggering the consumer with
-  // 0 rows to return. Be wary of ever returning 0-row batches to the client; some poorly
-  // written clients may not cope correctly with them. See IMPALA-4335.
-  while (current_batch_row < batch->num_rows()) {
-    unique_lock<mutex> l(lock_);
-    // Wait until the consumer gives us a result set to fill in, or the fragment
-    // instance has been cancelled.
-    while (results_ == nullptr && !state->is_cancelled()) {
-      SCOPED_TIMER(profile_->inactive_timer());
-      sender_cv_.Wait(l);
+  // TODO handle return value
+  // TODO row-batch-queue does a move here, necessary?
+  VLOG_QUERY << "About to add the batch";
+  if (batch->num_rows() > 0) {
+    bool result = query_results_.BlockingPut(batch);
+    if (!result) {
+    Status err = Status::Expected(TErrorCode::ROWS_PRODUCED_LIMIT_EXCEEDED,
+        PrintId(state->query_id()),
+        PrettyPrinter::Print(num_rows_produced_limit_, TUnit::NONE));
+    VLOG_QUERY << err.msg().msg();
+    VLOG_QUERY << "Failed to add the batch";
+    return err;
     }
-    RETURN_IF_CANCELLED(state);
-
-    // Otherwise the consumer is ready. Fill out the rows.
-    DCHECK(results_ != nullptr);
-    int num_to_fetch = batch->num_rows() - current_batch_row;
-    if (num_rows_requested_ > 0) num_to_fetch = min(num_to_fetch, num_rows_requested_);
-    RETURN_IF_ERROR(
-        results_->AddRows(output_expr_evals_, batch, current_batch_row, num_to_fetch));
-    current_batch_row += num_to_fetch;
-    // Prevent expr result allocations from accumulating.
-    expr_results_pool_->Clear();
-    // Signal the consumer.
-    results_ = nullptr;
-    consumer_cv_.NotifyAll();
   }
+
+  VLOG_QUERY << "Successfully added the batch";
+
+  expr_results_pool_->Clear();
+
   return Status::OK();
 }
 
 Status PlanRootSink::FlushFinal(RuntimeState* state) {
   SCOPED_TIMER(profile()->total_time_counter());
-  unique_lock<mutex> l(lock_);
+  //unique_lock<mutex> l(lock_);
   sender_state_ = SenderState::EOS;
-  consumer_cv_.NotifyAll();
+  //consumer_cv_.NotifyAll();
+  query_results_.Shutdown();
+  // TODO can probably rely on the old way of singaling an eos for now
   return Status::OK();
 }
 
 void PlanRootSink::Close(RuntimeState* state) {
   SCOPED_TIMER(profile()->total_time_counter());
-  unique_lock<mutex> l(lock_);
+  //unique_lock<mutex> l(lock_);
   // FlushFinal() won't have been called when the fragment instance encounters an error
   // before sending all rows.
   if (sender_state_ == SenderState::ROWS_PENDING) {
     sender_state_ = SenderState::CLOSED_NOT_EOS;
   }
-  consumer_cv_.NotifyAll();
+  query_results_.Shutdown();
+  //consumer_cv_.NotifyAll();
   DataSink::Close(state);
 }
 
 void PlanRootSink::Cancel(RuntimeState* state) {
   DCHECK(state->is_cancelled());
-  sender_cv_.NotifyAll();
-  consumer_cv_.NotifyAll();
+  query_results_.Shutdown();
+  //sender_cv_.NotifyAll();
+  //consumer_cv_.NotifyAll();
 }
 
 Status PlanRootSink::GetNext(
     RuntimeState* state, QueryResultSet* results, int num_results, bool* eos) {
-  unique_lock<mutex> l(lock_);
+  //unique_lock<mutex> l(lock_);
 
-  results_ = results;
+  //bool result = query_results_.BlockingGet(results);
+  //results_ = results;
   num_rows_requested_ = num_results;
-  sender_cv_.NotifyAll();
+  //sender_cv_.NotifyAll();
+  int current_batch_row = 0;
+
+  // TODO set eos?
+  RowBatch* batch;
+  bool result = query_results_.BlockingGet(&batch);
+  VLOG_QUERY << "Got a row batch";
+  if (!result) {
+    VLOG_QUERY << "Did not get a row batch";
+    *eos = true;
+  }
+  
+  // Don't enter the loop if batch->num_rows() == 0; no point triggering the consumer with
+  // 0 rows to return. Be wary of ever returning 0-row batches to the client; some poorly
+  // written clients may not cope correctly with them. See IMPALA-4335.
+  while (current_batch_row < batch->num_rows()) {
+   // unique_lock<mutex> l(lock_);
+    // Wait until the consumer gives us a result set to fill in, or the fragment
+    // instance has been cancelled.
+    //while (results_ == nullptr && !state->is_cancelled()) {
+   //   SCOPED_TIMER(profile_->inactive_timer());
+    //  sender_cv_.Wait(l);
+    //}
+    // TODO probably need to a BlockingPut in a while loop?
+    //RETURN_IF_CANCELLED(state);
+
+    // Otherwise the consumer is ready. Fill out the rows.
+    //DCHECK(results_ != nullptr);
+    int num_to_fetch = batch->num_rows() - current_batch_row;
+    if (num_rows_requested_ > 0) num_to_fetch = min(num_to_fetch, num_rows_requested_);
+    RETURN_IF_ERROR(
+        results->AddRows(output_expr_evals_, batch, current_batch_row, num_to_fetch));
+    current_batch_row += num_to_fetch;
+    // TODO what do we need to do this with expr_results_pool seems memory related
+    // Prevent expr result allocations from accumulating.
+    //expr_results_pool_->Clear();
+  }
 
   // Wait while the sender is still producing rows and hasn't filled in the current
   // result set.
-  while (sender_state_ == SenderState::ROWS_PENDING && results_ != nullptr &&
-      !state->is_cancelled()) {
-    consumer_cv_.Wait(l);
-  }
+  //while (sender_state_ == SenderState::ROWS_PENDING && results_ != nullptr &&
+  //    !state->is_cancelled()) {
+  //  consumer_cv_.Wait(l);
+  //}
 
-  *eos = sender_state_ == SenderState::EOS;
+  // TODO probably better to model this as a POISON pill that indicates eos
+  // TODO or should the poison pill just be a shutdown?
+  //*eos = sender_state_ == SenderState::EOS;
   return state->GetQueryStatus();
 }
 }

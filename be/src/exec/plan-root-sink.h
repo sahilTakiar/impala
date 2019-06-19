@@ -18,7 +18,9 @@
 #ifndef IMPALA_EXEC_PLAN_ROOT_SINK_H
 #define IMPALA_EXEC_PLAN_ROOT_SINK_H
 
+#include "runtime/row-batch.h"
 #include "exec/data-sink.h"
+#include "util/plan-root-sink-blocking-queue.h"
 #include "util/condition-variable.h"
 
 namespace impala {
@@ -103,6 +105,9 @@ class PlanRootSink : public DataSink {
   /// the consumer.
   ConditionVariable consumer_cv_;
 
+  // TODO is unique pointer necessary? maybe not, was the issue not specifying the RowBatchBytesFn?
+  PlanRootSinkBlockingQueue<RowBatch*> query_results_;
+  
   /// State of the sender:
   /// - ROWS_PENDING: the sender is still producing rows; the only non-terminal state
   /// - EOS: the sender has passed all rows to Send()
@@ -114,7 +119,7 @@ class PlanRootSink : public DataSink {
   /// The current result set passed to GetNext(), to fill in Send(). Not owned by this
   /// sink. Reset to nullptr after Send() completes the request to signal to the consumer
   /// that it can return.
-  QueryResultSet* results_ = nullptr;
+  //QueryResultSet* results_ = nullptr;
 
   /// Set by GetNext() to indicate to Send() how many rows it should write to results_.
   int num_rows_requested_ = 0;
