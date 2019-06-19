@@ -19,6 +19,8 @@
 #define IMPALA_EXEC_PLAN_ROOT_SINK_H
 
 #include "exec/data-sink.h"
+#include "runtime/buffered-tuple-stream.h"
+#include "runtime/reservation-manager.h"
 #include "util/condition-variable.h"
 
 namespace impala {
@@ -62,7 +64,13 @@ class ScalarExprEvaluator;
 /// and consumer. See IMPALA-4268.
 class PlanRootSink : public DataSink {
  public:
-  PlanRootSink(TDataSinkId sink_id, const RowDescriptor* row_desc, RuntimeState* state);
+  PlanRootSink(TDataSinkId sink_id, const RowDescriptor* row_desc, RuntimeState* state,
+          const TBackendResourceProfile& resource_profile, const TDebugOptions& debug_options, QueryState* query_state,
+          const RowDescriptor* output_row_desc);
+
+  virtual Status Open(RuntimeState* state);
+
+  virtual Status Prepare(RuntimeState* state, MemTracker* parent_mem_tracker);
 
   /// Sends a new batch. Ownership of 'batch' remains with the sender. Blocks until the
   /// consumer has consumed 'batch' by calling GetNext().
@@ -70,6 +78,8 @@ class PlanRootSink : public DataSink {
 
   /// Indicates eos and notifies consumer.
   virtual Status FlushFinal(RuntimeState* state);
+
+  virtual void ReleaseReceiverResources(RuntimeState* state);
 
   /// To be called by sender only. Release resources and unblocks consumer.
   virtual void Close(RuntimeState* state);
@@ -92,16 +102,7 @@ class PlanRootSink : public DataSink {
   /// Protects all members, including the condition variables.
   boost::mutex lock_;
 
-  /// Waited on by the sender only. Signalled when the consumer has written results_ and
-  /// num_rows_requested_, and so the sender may begin satisfying that request for rows
-  /// from its current batch. Also signalled when Cancel() is called, to unblock the
-  /// sender.
-  ConditionVariable sender_cv_;
-
-  /// Waited on by the consumer only. Signalled when the sender has finished serving a
-  /// request for rows. Also signalled by FlushFinal(), Close() and Cancel() to unblock
-  /// the consumer.
-  ConditionVariable consumer_cv_;
+  std::unique_ptr<BufferedTupleStream> query_results_;
 
   /// State of the sender:
   /// - ROWS_PENDING: the sender is still producing rows; the only non-terminal state
@@ -111,19 +112,28 @@ class PlanRootSink : public DataSink {
   enum class SenderState { ROWS_PENDING, EOS, CLOSED_NOT_EOS };
   SenderState sender_state_ = SenderState::ROWS_PENDING;
 
-  /// The current result set passed to GetNext(), to fill in Send(). Not owned by this
-  /// sink. Reset to nullptr after Send() completes the request to signal to the consumer
-  /// that it can return.
-  QueryResultSet* results_ = nullptr;
-
   /// Set by GetNext() to indicate to Send() how many rows it should write to results_.
-  int num_rows_requested_ = 0;
+  int num_rows_read_ = 0;
 
   /// Updated by Send() to indicate the total number of rows produced by query execution.
   int64_t num_rows_produced_ = 0;
 
   /// Limit on the number of rows produced by this query, initialized by the constructor.
   const int64_t num_rows_produced_limit_;
+
+  const TBackendResourceProfile& resource_profile_;
+
+  ReservationManager reservation_manager_;
+
+  const TDebugOptions& debug_options_;
+
+  QueryState* query_state_;
+
+  const RowDescriptor* output_row_desc_;
+
+  RowBatch *intermediate_read_batch_;
+
+  ConditionVariable rows_available_;
 };
 }
 

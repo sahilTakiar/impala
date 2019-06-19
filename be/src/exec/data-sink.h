@@ -91,7 +91,9 @@ class DataSink {
   /// thrift_sink.
   static Status Create(const TPlanFragmentCtx& fragment_ctx,
       const TPlanFragmentInstanceCtx& fragment_instance_ctx,
-      const RowDescriptor* row_desc, RuntimeState* state, DataSink** sink);
+      const RowDescriptor* row_desc, RuntimeState* state, DataSink** sink,
+      const TBackendResourceProfile& resource_profile, const TDebugOptions& debug_options, QueryState* query_state,
+      const RowDescriptor* output_row_desc);
 
   MemTracker* mem_tracker() const { return mem_tracker_.get(); }
   RuntimeProfile* profile() const { return profile_; }

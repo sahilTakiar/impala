@@ -24,9 +24,11 @@
 #include "rpc/thrift-util.h"
 #include "runtime/raw-value.h"
 #include "runtime/row-batch.h"
+#include "runtime/tuple-row.h"
 #include "runtime/types.h"
 #include "service/hs2-util.h"
 #include "util/bit-util.h"
+#include "util/debug-util.h"
 
 #include "common/names.h"
 
@@ -183,13 +185,21 @@ Status AsciiQueryResultSet::AddRows(const vector<ScalarExprEvaluator*>& expr_eva
   stringstream out_stream;
   out_stream.precision(ASCII_PRECISION);
   FOREACH_ROW_LIMIT(batch, start_idx, num_rows, it) {
+    Tuple *tuple = it.Get()->GetTuple(0);
     for (int i = 0; i < num_col; ++i) {
       // ODBC-187 - ODBC can only take "\t" as the delimiter
       out_stream << (i > 0 ? "\t" : "");
       DCHECK_EQ(1, metadata_.columns[i].columnType.types.size());
-      RawValue::PrintValue(expr_evals[i]->GetValue(it.Get()),
-          ColumnType::FromThrift(metadata_.columns[i].columnType), scales[i],
-          &out_stream);
+      // TODO need to follow logic in debug-util ::PrintTuple
+      if (tuple->IsNull(batch->row_desc()->tuple_descriptors()[0]->slots()[i]->null_indicator_offset())) {
+        RawValue::PrintValue(NULL,
+                             ColumnType::FromThrift(metadata_.columns[i].columnType), scales[i],
+                             &out_stream);
+      } else {
+        RawValue::PrintValue(tuple->GetSlot(batch->row_desc()->tuple_descriptors()[0]->slots()[i]->tuple_offset()),
+                             ColumnType::FromThrift(metadata_.columns[i].columnType), scales[i],
+                             &out_stream);
+      }
     }
     result_set_->push_back(out_stream.str());
     out_stream.str("");
@@ -294,7 +304,7 @@ Status HS2ColumnarResultSet::AddRows(const vector<ScalarExprEvaluator*>& expr_ev
     const TColumnType& type = metadata_.columns[i].columnType;
     ScalarExprEvaluator* expr_eval = expr_evals[i];
     ExprValuesToHS2TColumn(expr_eval, type, batch, start_idx, num_rows, num_rows_,
-        &(result_set_->columns[i]));
+        &(result_set_->columns[i]), i);
   }
   num_rows_ += num_rows;
   return Status::OK();
@@ -461,11 +471,13 @@ Status HS2RowOrientedResultSet::AddRows(const vector<ScalarExprEvaluator*>& expr
   result_set_->rows.reserve(
       BitUtil::RoundUpToPowerOfTwo(result_set_->rows.size() + num_rows - start_idx));
   FOREACH_ROW_LIMIT(batch, start_idx, num_rows, it) {
+    Tuple *tuple = it.Get()->GetTuple(0);
     result_set_->rows.push_back(TRow());
     TRow& trow = result_set_->rows.back();
     trow.colVals.resize(num_col);
     for (int i = 0; i < num_col; ++i) {
-      ExprValueToHS2TColumnValue(expr_evals[i]->GetValue(it.Get()),
+      // tuple->GetSlot(batch->row_desc()->tuple_descriptors()[0]->slots()[i]->tuple_offset())
+      ExprValueToHS2TColumnValue(tuple->GetSlot(batch->row_desc()->tuple_descriptors()[0]->slots()[i]->tuple_offset()),
           metadata_.columns[i].columnType, &(trow.colVals[i]));
     }
   }

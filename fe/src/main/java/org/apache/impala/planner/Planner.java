@@ -32,7 +32,10 @@ import org.apache.impala.analysis.ExprSubstitutionMap;
 import org.apache.impala.analysis.InsertStmt;
 import org.apache.impala.analysis.JoinOperator;
 import org.apache.impala.analysis.QueryStmt;
+import org.apache.impala.analysis.SlotDescriptor;
+import org.apache.impala.analysis.SlotRef;
 import org.apache.impala.analysis.SortInfo;
+import org.apache.impala.analysis.TupleDescriptor;
 import org.apache.impala.analysis.TupleId;
 import org.apache.impala.catalog.FeHBaseTable;
 import org.apache.impala.catalog.FeKuduTable;
@@ -147,6 +150,10 @@ public class Planner {
       rootFragment.setSink(insertStmt.createDataSink());
       resultExprs = insertStmt.getResultExprs();
     } else {
+      // TODO does moving this earlier cause any issues?
+      QueryStmt queryStmt = ctx_.getQueryStmt();
+      queryStmt.substituteResultExprs(rootNodeSmap, ctx_.getRootAnalyzer());
+      resultExprs = queryStmt.getResultExprs();
       if (ctx_.isUpdate()) {
         // Set up update sink for root fragment
         rootFragment.setSink(ctx_.getAnalysisResult().getUpdateStmt().createDataSink());
@@ -154,11 +161,26 @@ public class Planner {
         // Set up delete sink for root fragment
         rootFragment.setSink(ctx_.getAnalysisResult().getDeleteStmt().createDataSink());
       } else if (ctx_.isQuery()) {
-        rootFragment.setSink(ctx_.getAnalysisResult().getQueryStmt().createDataSink());
+        TupleDescriptor tupleDescriptor =
+            queryStmt.getAnalyzer().getDescTbl().createTupleDescriptor("plan-root-sink");
+        tupleDescriptor.setIsMaterialized(true);
+        for (Expr expr : resultExprs) {
+          SlotDescriptor dstSlotDesc;
+          if (expr instanceof SlotRef) {
+            SlotDescriptor srcSlotDesc = ((SlotRef) expr).getDesc();
+            dstSlotDesc =
+                queryStmt.getAnalyzer().copySlotDescriptor(srcSlotDesc, tupleDescriptor);
+          } else {
+            dstSlotDesc = queryStmt.getAnalyzer().addSlotDescriptor(tupleDescriptor);
+            dstSlotDesc.initFromExpr(expr);
+          }
+          dstSlotDesc.setSourceExpr(expr);
+          dstSlotDesc.setIsMaterialized(true);
+        }
+        tupleDescriptor.computeMemLayout();
+        rootFragment.setSink(
+            ctx_.getAnalysisResult().getQueryStmt().createDataSink(tupleDescriptor));
       }
-      QueryStmt queryStmt = ctx_.getQueryStmt();
-      queryStmt.substituteResultExprs(rootNodeSmap, ctx_.getRootAnalyzer());
-      resultExprs = queryStmt.getResultExprs();
     }
     rootFragment.setOutputExprs(resultExprs);
 
@@ -397,6 +419,12 @@ public class Planner {
       // Compute the per-node, per-sink and aggregate profiles for the fragment.
       fragment.computeResourceProfile(ctx_.getRootAnalyzer());
 
+      ResourceProfile fragmentResourceProfile = fragment.getResourceProfile();
+      if (fragment.hasSink() && fragment.getSink() instanceof PlanRootSink) {
+        fragmentResourceProfile =
+            fragmentResourceProfile.sum(fragment.getSink().getResourceProfile());
+      }
+
       // Different fragments do not synchronize their Open() and Close(), so the backend
       // does not provide strong guarantees about whether one fragment instance releases
       // resources before another acquires them. Conservatively assume that all fragment
@@ -404,7 +432,7 @@ public class Planner {
       // at the same time, i.e. that the query-wide peak resources is the sum of the
       // per-fragment-instance peak resources.
       maxPerHostPeakResources = maxPerHostPeakResources.sum(
-          fragment.getResourceProfile().multiply(fragment.getNumInstancesPerHost(mtDop)));
+          fragmentResourceProfile.multiply(fragment.getNumInstancesPerHost(mtDop)));
     }
     planRoots.get(0).computePipelineMembership();
 

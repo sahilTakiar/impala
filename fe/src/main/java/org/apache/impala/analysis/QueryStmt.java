@@ -477,8 +477,8 @@ public abstract class QueryStmt extends StatementBase {
     resultExprs_ = Expr.substituteList(resultExprs_, smap, analyzer, true);
   }
 
-  public DataSink createDataSink() {
-    return new PlanRootSink();
+  public DataSink createDataSink(TupleDescriptor tupleDescriptor) {
+    return new PlanRootSink(tupleDescriptor);
   }
 
   public List<OrderByElement> cloneOrderByElements() {

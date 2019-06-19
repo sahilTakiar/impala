@@ -261,8 +261,16 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         .setMinMemReservationBytes(runtimeFiltersMemReservationBytes_)
         .setThreadReservation(1).build()
         .sum(planTreeProfile.duringOpenProfile.max(fInstancePostOpenProfile));
-    initialMemReservationTotalClaims_ = sink_.getResourceProfile().getMinMemReservationBytes() +
-        runtimeFiltersMemReservationBytes_;
+    // Don't account for PlanRootSink memory consumption at the fragment level as it is
+    // accounted for at the query level
+//    if (!(sink_ instanceof PlanRootSink)) {
+    // TODO this is needed for some optimization in InitialReservations, has something
+    // to do with the setting of initial_mem_reservation_total_claims
+      initialMemReservationTotalClaims_ = sink_.getResourceProfile().getMinMemReservationBytes() +
+              runtimeFiltersMemReservationBytes_;
+//    } else {
+//      initialMemReservationTotalClaims_ = runtimeFiltersMemReservationBytes_;
+//    }
     for (PlanNode node: collectPlanNodes()) {
       initialMemReservationTotalClaims_ +=
           node.getNodeResourceProfile().getMinMemReservationBytes();

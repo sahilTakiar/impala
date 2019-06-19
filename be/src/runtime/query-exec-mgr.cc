@@ -149,6 +149,8 @@ void QueryExecMgr::ExecuteQueryHelper(QueryState* qs) {
   // decrement refcount taken in QueryState::Init();
   qs->ReleaseBackendResourceRefcount();
   // decrement refcount taken in StartQuery()
+  qs->WaitForFetchedResults();
+  qs->ReleaseAdmissionControlResources();
   ReleaseQueryState(qs);
 }
 

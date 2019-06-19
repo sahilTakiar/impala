@@ -113,6 +113,7 @@ void TestEnv::TearDownQueries() {
   runtime_states_.clear();
   for (QueryState* query_state : query_states_) {
     query_state->ReleaseBackendResourceRefcount(); // Acquired by QueryState::Init()
+    query_state->ReleaseAdmissionControlResources();
     exec_env_->query_exec_mgr()->ReleaseQueryState(query_state);
   }
   query_states_.clear();

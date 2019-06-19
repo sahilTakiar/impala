@@ -142,11 +142,9 @@ class QueryState {
   /// the backend execution (ie. not the coordinator side, since they require holding
   /// an backend resource refcnt).
   ReservationTracker* buffer_reservation() const {
-    DCHECK_GT(backend_resource_refcnt_.Load(), 0);
     return buffer_reservation_;
   }
   InitialReservations* initial_reservations() const {
-    DCHECK_GT(backend_resource_refcnt_.Load(), 0);
     return initial_reservations_;
   }
   TmpFileMgr::FileGroup* file_group() const {
@@ -228,6 +226,8 @@ class QueryState {
   /// Called by a FragmentInstanceState thread to notify that it's done executing.
   void DoneExecuting() { discard_result(instances_finished_barrier_->Notify()); }
 
+  void DoneFetchingResults();
+
   /// Called by a fragment instance thread to notify that it hit an error during Prepare()
   /// Updates the query status and the failed instance ID if it's not set already.
   /// Also notifies anyone waiting on WaitForPrepare() if this is called by the last
@@ -257,6 +257,8 @@ class QueryState {
   /// Blocks until all fragment instances have finished executing or until one of them
   /// hits an error.
   void WaitForFinish();
+
+  void WaitForFetchedResults();
 
   /// States that a query goes through during its lifecycle.
   enum class BackendExecState {
@@ -355,6 +357,10 @@ class QueryState {
   /// and so is 'failed_instance_id_' if an error is hit.
   std::unique_ptr<CountingBarrier> instances_finished_barrier_;
 
+  boost::mutex fetch_results_lock_;
+
+  ConditionVariable fetch_results_cv_;
+
   /// map from instance id to its state (owned by obj_pool_), populated in
   /// StartFInstances(); Not valid to read from until 'instances_prepared_barrier_'
   /// is set (i.e. readers should always call WaitForPrepare()).
@@ -414,6 +420,8 @@ class QueryState {
   /// once. Must be called before destroying the QueryState. Not idempotent and not
   /// thread-safe.
   void ReleaseBackendResources();
+
+  void ReleaseAdmissionControlResources();
 
   /// Helper for ReportExecStatus() to construct a status report to be sent to the
   /// coordinator. The execution statuses (e.g. 'done' indicator) of all fragment

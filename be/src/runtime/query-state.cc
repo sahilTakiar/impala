@@ -108,8 +108,6 @@ void QueryState::ReleaseBackendResources() {
   // Clean up temporary files.
   if (file_group_ != nullptr) file_group_->Close();
   // Release any remaining reservation.
-  if (initial_reservations_ != nullptr) initial_reservations_->ReleaseResources();
-  if (buffer_reservation_ != nullptr) buffer_reservation_->Close();
   if (desc_tbl_ != nullptr) desc_tbl_->ReleaseResources();
   // Mark the query as finished on the query MemTracker so that admission control will
   // not consider the whole query memory limit to be "reserved".
@@ -118,6 +116,11 @@ void QueryState::ReleaseBackendResources() {
   // memory may still be used by the ClientRequestState for result caching. The query
   // MemTracker will be closed later when this QueryState is torn down.
   released_backend_resources_ = true;
+}
+
+void QueryState::ReleaseAdmissionControlResources() {
+  if (initial_reservations_ != nullptr) initial_reservations_->ReleaseResources();
+  if (buffer_reservation_ != nullptr) buffer_reservation_->Close();
 }
 
 QueryState::~QueryState() {
@@ -498,6 +501,16 @@ bool QueryState::WaitForFinishOrTimeout(int32_t timeout_ms) {
   bool timed_out = false;
   instances_finished_barrier_->Wait(timeout_ms, &timed_out);
   return !timed_out;
+}
+
+void QueryState::WaitForFetchedResults() {
+  unique_lock<mutex> fetch_results_unique_lock(fetch_results_lock_);;
+  fetch_results_cv_.Wait(fetch_results_unique_lock);
+}
+
+void QueryState::DoneFetchingResults() {
+  unique_lock<mutex> fetch_results_unique_lock(fetch_results_lock_);
+  fetch_results_cv_.NotifyAll();
 }
 
 bool QueryState::StartFInstances() {

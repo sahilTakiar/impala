@@ -861,6 +861,10 @@ string Coordinator::GetErrorLog() {
 }
 
 void Coordinator::ReleaseExecResources() {
+  // Release the plan_root_sink resources because the query either hit an error, was cancelled, or returned all results
+  if (coord_sink_ != nullptr) coord_sink_->ReleaseReceiverResources(coord_instance_->runtime_state());
+  query_state_->DoneFetchingResults();
+
   lock_guard<shared_mutex> lock(filter_lock_);
   if (filter_routing_table_.size() > 0) {
     query_profile_->AddInfoString("Final filter table", FilterDebugString());

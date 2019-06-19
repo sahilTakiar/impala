@@ -36,7 +36,7 @@ void TColumnValueToHS2TColumn(const TColumnValue& col_val, const TColumnType& ty
 /// For V6->
 void ExprValuesToHS2TColumn(ScalarExprEvaluator* expr_eval, const TColumnType& type,
     RowBatch* batch, int start_idx, int num_rows, uint32_t output_row_idx,
-    apache::hive::service::cli::thrift::TColumn* column);
+    apache::hive::service::cli::thrift::TColumn* column, int col_index);
 
 /// For V1->V5
 void TColumnValueToHS2TColumnValue(const TColumnValue& col_val, const TColumnType& type,

@@ -211,9 +211,20 @@ Status FragmentInstanceState::Prepare() {
 
   // prepare sink_
   DCHECK(fragment_ctx_.fragment.__isset.output_sink);
-  RETURN_IF_ERROR(DataSink::Create(fragment_ctx_, instance_ctx_, exec_tree_->row_desc(),
-      runtime_state_, &sink_));
-  RETURN_IF_ERROR(sink_->Prepare(runtime_state_, runtime_state_->instance_mem_tracker()));
+  if (fragment_ctx_.fragment.output_sink.type == TDataSinkType::PLAN_ROOT_SINK) {
+    const RowDescriptor* output_row_desc = new RowDescriptor(query_state_->desc_tbl(),
+            fragment_ctx_.fragment.output_sink.plan_root_sink.row_tuples,
+            fragment_ctx_.fragment.output_sink.plan_root_sink.nullable_tuples);
+    RETURN_IF_ERROR(DataSink::Create(fragment_ctx_, instance_ctx_, exec_tree_->row_desc(),
+                                     runtime_state_, &sink_, fragment_ctx_.fragment.output_sink.plan_root_sink.resource_profile,
+                                     instance_ctx_.debug_options, query_state_, output_row_desc));
+    RETURN_IF_ERROR(sink_->Prepare(runtime_state_, runtime_state_->query_mem_tracker()));
+  } else {
+    RETURN_IF_ERROR(DataSink::Create(fragment_ctx_, instance_ctx_, exec_tree_->row_desc(),
+                                     runtime_state_, &sink_, exec_tree_->resource_profile(),
+                                     instance_ctx_.debug_options, query_state_, nullptr));
+    RETURN_IF_ERROR(sink_->Prepare(runtime_state_, runtime_state_->instance_mem_tracker()));
+  }
   RuntimeProfile* sink_profile = sink_->profile();
   if (sink_profile != nullptr) profile()->AddChild(sink_profile);
 
@@ -223,7 +234,7 @@ Status FragmentInstanceState::Prepare() {
     // of the time waiting and doing very little work. Holding on to the token causes
     // underutilization of the machine. If there are 12 queries on this node, that's 12
     // tokens reserved for no reason.
-    ReleaseThreadToken();
+    ReleaseThreadToken(); // TODO double check this
   }
 
   // set up profile counters
@@ -386,12 +397,17 @@ void FragmentInstanceState::Close() {
 
   // If we haven't already released this thread token in Prepare(), release
   // it before calling Close().
+  // TODO is the check for PLAN_ROOT_SINK necessary?
   if (fragment_ctx_.fragment.output_sink.type != TDataSinkType::PLAN_ROOT_SINK) {
     ReleaseThreadToken();
   }
 
   // guard against partially-finished Prepare()
-  if (sink_ != nullptr) sink_->Close(runtime_state_);
+  // TODO double check this
+  if (root_sink_ == nullptr && sink_ != nullptr) {
+    VLOG_QUERY << "Closing DataSink";
+    sink_->Close(runtime_state_);
+  }
 
   // Stop updating profile counters in background.
   profile()->StopPeriodicCounters();

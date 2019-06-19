@@ -25,6 +25,9 @@
 #include "runtime/descriptors.h"
 #include "runtime/mem-pool.h"
 #include "util/ubsan.h"
+#include "date-value.h"
+#include "timestamp-value.h"
+#include "decimal-value.h"
 
 namespace llvm {
 class Function;
@@ -263,12 +266,46 @@ class Tuple {
     return static_cast<bool*>(GetSlot(offset));
   }
 
+  int8_t* GetTinyIntSlot(int offset) {
+    return static_cast<int8_t*>(GetSlot(offset));
+  }
+
+  int16_t* GetSmallIntSlot(int offset) {
+    return static_cast<int16_t*>(GetSlot(offset));
+  }
+
   int32_t* GetIntSlot(int offset) {
     return static_cast<int32_t*>(GetSlot(offset));
   }
 
-  int64_t* GetBigIntSlot(int offset) {
-    return static_cast<int64_t*>(GetSlot(offset));
+  const DateValue* GetDateSlot(int offset) const {
+    return reinterpret_cast<const DateValue*>(GetSlot(offset));
+  }
+
+  int64_t* GetBigIntSlot(int offset) { return static_cast<int64_t*>(GetSlot(offset)); }
+
+  float* GetFloatSlot(int offset) { return static_cast<float*>(GetSlot(offset)); }
+
+  double* GetDoubleSlot(int offset) { return static_cast<double*>(GetSlot(offset)); }
+
+  const char* GetCharSlot(int offset, int len) {
+    return reinterpret_cast<const char*>(GetSlot(offset), len);
+  }
+
+  const TimestampValue* GetTimestampSlot(int offset) const {
+    return reinterpret_cast<const TimestampValue*>(GetSlot(offset));
+  }
+
+  const Decimal4Value* GetDecimal4Slot(int offset) {
+    return reinterpret_cast<const Decimal4Value*>(GetSlot(offset));
+  }
+
+  const Decimal8Value* GetDecimal8Slot(int offset) {
+    return reinterpret_cast<const Decimal8Value*>(GetSlot(offset));
+  }
+
+  const Decimal16Value* GetDecimal16Slot(int offset) {
+    return reinterpret_cast<const Decimal16Value*>(GetSlot(offset));
   }
 
   StringValue* GetStringSlot(int offset) {

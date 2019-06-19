@@ -65,7 +65,8 @@ DataSink::~DataSink() {
 
 Status DataSink::Create(const TPlanFragmentCtx& fragment_ctx,
     const TPlanFragmentInstanceCtx& fragment_instance_ctx, const RowDescriptor* row_desc,
-    RuntimeState* state, DataSink** sink) {
+    RuntimeState* state, DataSink** sink, const TBackendResourceProfile& resource_profile,
+    const TDebugOptions& debug_options, QueryState* query_state, const RowDescriptor* output_row_desc) {
   const TDataSink& thrift_sink = fragment_ctx.fragment.output_sink;
   const vector<TExpr>& thrift_output_exprs = fragment_ctx.fragment.output_exprs;
   ObjectPool* pool = state->obj_pool();
@@ -106,7 +107,8 @@ Status DataSink::Create(const TPlanFragmentCtx& fragment_ctx,
       }
       break;
     case TDataSinkType::PLAN_ROOT_SINK:
-      *sink = pool->Add(new PlanRootSink(sink_id, row_desc, state));
+      *sink = pool->Add(new PlanRootSink(sink_id, row_desc, state, resource_profile, debug_options, query_state,
+              output_row_desc));
       break;
     case TDataSinkType::JOIN_BUILD_SINK:
       // IMPALA-4224 - join build sink not supported in backend execution.
