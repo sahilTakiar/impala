@@ -204,12 +204,36 @@ Status PlanRootSink::GetNext(
 
   // rows_available_ might have been woken up by FlushFinal, so double check if there are any more rows to read
   if (!state->is_cancelled() && sender_state_ != SenderState::CLOSED_NOT_EOS && num_rows_produced_ > num_rows_read_) {
-    RowBatch batch(output_row_desc_, state->batch_size(), mem_tracker_.get());
-    bool streamEos = false;
-    RETURN_IF_ERROR(query_results_->GetNext(&batch, &streamEos));
-    RETURN_IF_ERROR(results->AddRows(output_expr_evals_, &batch, 0, batch.num_rows()));
-    num_rows_read_ += batch.num_rows();
-    batch.Reset();
+    if (intermediate_read_batch_) {
+      if (intermediate_read_batch_index_ + num_results >= intermediate_read_batch_->num_rows()) {
+        // Read until the end of the batch, for now, we return the rest of the batch rather than reading into the next batch
+        RETURN_IF_ERROR(results->AddRows(output_expr_evals_, intermediate_read_batch_.get(), intermediate_read_batch_index_, intermediate_read_batch_->num_rows() - intermediate_read_batch_index_));
+        num_rows_read_ += num_results;
+        intermediate_read_batch_index_ = 0;
+        intermediate_read_batch_->Reset(); // TODO probably need to clean this up in cancel as well?
+        intermediate_read_batch_.reset();
+      } else {
+        RETURN_IF_ERROR(results->AddRows(output_expr_evals_, intermediate_read_batch_.get(), intermediate_read_batch_index_, num_results));
+        intermediate_read_batch_index_ += num_results;
+        num_rows_read_ += num_results;
+      }
+    } else {
+      std::unique_ptr<RowBatch> batch = std::make_unique<RowBatch>(output_row_desc_, state->batch_size(), mem_tracker_.get());
+      bool streamEos = false;
+      RETURN_IF_ERROR(query_results_->GetNext(batch.get(), &streamEos));
+      if (batch->num_rows() > num_results) {
+        intermediate_read_batch_ = std::move(batch);
+        intermediate_read_batch_index_ = num_results;
+
+        RETURN_IF_ERROR(results->AddRows(output_expr_evals_, intermediate_read_batch_.get(), 0, num_results));
+        num_rows_read_ += num_results;
+      } else {
+        RETURN_IF_ERROR(results->AddRows(output_expr_evals_, batch.get(), 0, batch->num_rows()));
+        num_rows_read_ += batch->num_rows();
+        batch->Reset();
+        batch.reset();
+      }
+    }
   }
   *eos = sender_state_ == SenderState::EOS && num_rows_produced_ == num_rows_read_;
   return state->GetQueryStatus();

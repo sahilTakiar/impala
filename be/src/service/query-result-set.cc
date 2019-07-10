@@ -476,9 +476,13 @@ Status HS2RowOrientedResultSet::AddRows(const vector<ScalarExprEvaluator*>& expr
     TRow& trow = result_set_->rows.back();
     trow.colVals.resize(num_col);
     for (int i = 0; i < num_col; ++i) {
-      // tuple->GetSlot(batch->row_desc()->tuple_descriptors()[0]->slots()[i]->tuple_offset())
-      ExprValueToHS2TColumnValue(tuple->GetSlot(batch->row_desc()->tuple_descriptors()[0]->slots()[i]->tuple_offset()),
-          metadata_.columns[i].columnType, &(trow.colVals[i]));
+      if (tuple->IsNull(batch->row_desc()->tuple_descriptors()[0]->slots()[i]->null_indicator_offset())) {
+        ExprValueToHS2TColumnValue(NULL,
+                                   metadata_.columns[i].columnType, &(trow.colVals[i]));
+      } else {
+        ExprValueToHS2TColumnValue(tuple->GetSlot(batch->row_desc()->tuple_descriptors()[0]->slots()[i]->tuple_offset()),
+                                   metadata_.columns[i].columnType, &(trow.colVals[i]));
+      }
     }
   }
   return Status::OK();

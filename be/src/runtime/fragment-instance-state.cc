@@ -405,7 +405,6 @@ void FragmentInstanceState::Close() {
   // guard against partially-finished Prepare()
   // TODO double check this
   if (root_sink_ == nullptr && sink_ != nullptr) {
-    VLOG_QUERY << "Closing DataSink";
     sink_->Close(runtime_state_);
   }
 

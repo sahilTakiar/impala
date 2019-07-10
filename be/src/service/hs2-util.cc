@@ -147,9 +147,10 @@ static void BoolExprValuesToHS2TColumn(ScalarExprEvaluator* expr_eval, RowBatch*
   ReserveSpace(num_rows, output_row_idx, &column->boolVal);
   FOREACH_ROW_LIMIT(batch, start_idx, num_rows, it) {
     Tuple *tuple = it.Get()->GetTuple(0);
+    bool is_null = tuple->IsNull(batch->row_desc()->tuple_descriptors()[0]->slots()[col_index]->null_indicator_offset());
     BooleanVal val = tuple->GetBoolSlot(batch->row_desc()->tuple_descriptors()[0]->slots()[col_index]->tuple_offset());
     column->boolVal.values.push_back(val.val);
-    SetNullBit(output_row_idx, val.is_null, &column->boolVal.nulls);
+    SetNullBit(output_row_idx, val.is_null || is_null, &column->boolVal.nulls);
     ++output_row_idx;
   }
 }
@@ -161,9 +162,10 @@ static void TinyIntExprValuesToHS2TColumn(ScalarExprEvaluator* expr_eval, RowBat
   ReserveSpace(num_rows, output_row_idx, &column->byteVal);
   FOREACH_ROW_LIMIT(batch, start_idx, num_rows, it) {
     Tuple *tuple = it.Get()->GetTuple(0);
+    bool is_null = tuple->IsNull(batch->row_desc()->tuple_descriptors()[0]->slots()[col_index]->null_indicator_offset());
     TinyIntVal val = *tuple->GetTinyIntSlot(batch->row_desc()->tuple_descriptors()[0]->slots()[col_index]->tuple_offset());
     column->byteVal.values.push_back(val.val);
-    SetNullBit(output_row_idx, val.is_null, &column->byteVal.nulls);
+    SetNullBit(output_row_idx, val.is_null || is_null, &column->byteVal.nulls);
     ++output_row_idx;
   }
 }
@@ -175,9 +177,10 @@ static void SmallIntExprValuesToHS2TColumn(ScalarExprEvaluator* expr_eval,
   ReserveSpace(num_rows, output_row_idx, &column->i16Val);
   FOREACH_ROW_LIMIT(batch, start_idx, num_rows, it) {
     Tuple *tuple = it.Get()->GetTuple(0);
+    bool is_null = tuple->IsNull(batch->row_desc()->tuple_descriptors()[0]->slots()[col_index]->null_indicator_offset());
     SmallIntVal val = *tuple->GetSmallIntSlot(batch->row_desc()->tuple_descriptors()[0]->slots()[col_index]->tuple_offset());
     column->i16Val.values.push_back(val.val);
-    SetNullBit(output_row_idx, val.is_null, &column->i16Val.nulls);
+    SetNullBit(output_row_idx, val.is_null || is_null, &column->i16Val.nulls);
     ++output_row_idx;
   }
 }
@@ -190,9 +193,10 @@ static void IntExprValuesToHS2TColumn(ScalarExprEvaluator* expr_eval, RowBatch* 
   FOREACH_ROW_LIMIT(batch, start_idx, num_rows, it) {
     DCHECK_EQ(output_row_idx, column->i32Val.values.size());
     Tuple *tuple = it.Get()->GetTuple(0);
+    bool is_null = tuple->IsNull(batch->row_desc()->tuple_descriptors()[0]->slots()[col_index]->null_indicator_offset());
     IntVal val = *tuple->GetIntSlot(batch->row_desc()->tuple_descriptors()[0]->slots()[col_index]->tuple_offset());
     column->i32Val.values.push_back(val.val);
-    SetNullBit(output_row_idx, val.is_null, &column->i32Val.nulls);
+    SetNullBit(output_row_idx, val.is_null || is_null, &column->i32Val.nulls);
     ++output_row_idx;
   }
 }
@@ -204,9 +208,10 @@ static void BigIntExprValuesToHS2TColumn(ScalarExprEvaluator* expr_eval, RowBatc
   ReserveSpace(num_rows, output_row_idx, &column->i64Val);
   FOREACH_ROW_LIMIT(batch, start_idx, num_rows, it) {
     Tuple *tuple = it.Get()->GetTuple(0);
+    bool is_null = tuple->IsNull(batch->row_desc()->tuple_descriptors()[0]->slots()[col_index]->null_indicator_offset());
     BigIntVal val = *tuple->GetBigIntSlot(batch->row_desc()->tuple_descriptors()[0]->slots()[col_index]->tuple_offset());
     column->i64Val.values.push_back(val.val);
-    SetNullBit(output_row_idx, val.is_null, &column->i64Val.nulls);
+    SetNullBit(output_row_idx, val.is_null || is_null, &column->i64Val.nulls);
     ++output_row_idx;
   }
 }
@@ -218,9 +223,10 @@ static void FloatExprValuesToHS2TColumn(ScalarExprEvaluator* expr_eval, RowBatch
   ReserveSpace(num_rows, output_row_idx, &column->doubleVal);
   FOREACH_ROW_LIMIT(batch, start_idx, num_rows, it) {
     Tuple *tuple = it.Get()->GetTuple(0);
+    bool is_null = tuple->IsNull(batch->row_desc()->tuple_descriptors()[0]->slots()[col_index]->null_indicator_offset());
     FloatVal val = *tuple->GetFloatSlot(batch->row_desc()->tuple_descriptors()[0]->slots()[col_index]->tuple_offset());
     column->doubleVal.values.push_back(val.val);
-    SetNullBit(output_row_idx, val.is_null, &column->doubleVal.nulls);
+    SetNullBit(output_row_idx, val.is_null || is_null, &column->doubleVal.nulls);
     ++output_row_idx;
   }
 }
@@ -232,9 +238,10 @@ static void DoubleExprValuesToHS2TColumn(ScalarExprEvaluator* expr_eval, RowBatc
   ReserveSpace(num_rows, output_row_idx, &column->doubleVal);
   FOREACH_ROW_LIMIT(batch, start_idx, num_rows, it) {
     Tuple *tuple = it.Get()->GetTuple(0);
+    bool is_null = tuple->IsNull(batch->row_desc()->tuple_descriptors()[0]->slots()[col_index]->null_indicator_offset());
     DoubleVal val = *tuple->GetDoubleSlot(batch->row_desc()->tuple_descriptors()[0]->slots()[col_index]->tuple_offset());
     column->doubleVal.values.push_back(val.val);
-    SetNullBit(output_row_idx, val.is_null, &column->doubleVal.nulls);
+    SetNullBit(output_row_idx, val.is_null || is_null, &column->doubleVal.nulls);
     ++output_row_idx;
   }
 }
@@ -246,13 +253,14 @@ static void TimestampExprValuesToHS2TColumn(ScalarExprEvaluator* expr_eval,
   ReserveSpace(num_rows, output_row_idx, &column->stringVal);
   FOREACH_ROW_LIMIT(batch, start_idx, num_rows, it) {
     Tuple *tuple = it.Get()->GetTuple(0);
+    bool is_null = tuple->IsNull(batch->row_desc()->tuple_descriptors()[0]->slots()[col_index]->null_indicator_offset());
     const TimestampValue *val = tuple->GetTimestampSlot(batch->row_desc()->tuple_descriptors()[0]->slots()[col_index]->tuple_offset());
     column->stringVal.values.emplace_back();
     if (val != NULL) {
       RawValue::PrintValue(
           val, TYPE_TIMESTAMP, -1, &(column->stringVal.values.back()));
     }
-    SetNullBit(output_row_idx, val == NULL, &column->stringVal.nulls);
+    SetNullBit(output_row_idx, val == NULL || is_null, &column->stringVal.nulls);
     ++output_row_idx;
   }
 }
@@ -264,13 +272,14 @@ static void DateExprValuesToHS2TColumn(ScalarExprEvaluator* expr_eval,
   ReserveSpace(num_rows, output_row_idx, &column->stringVal);
   FOREACH_ROW_LIMIT(batch, start_idx, num_rows, it) {
     Tuple *tuple = it.Get()->GetTuple(0);
+    bool is_null = tuple->IsNull(batch->row_desc()->tuple_descriptors()[0]->slots()[col_index]->null_indicator_offset());
     const DateValue *val = tuple->GetDateSlot(batch->row_desc()->tuple_descriptors()[0]->slots()[col_index]->tuple_offset());
     column->stringVal.values.emplace_back();
     if (val != NULL) {
       RawValue::PrintValue(
           val, TYPE_DATE, -1, &(column->stringVal.values.back()));
     }
-    SetNullBit(output_row_idx, val == NULL, &column->stringVal.nulls);
+    SetNullBit(output_row_idx, val == NULL || is_null, &column->stringVal.nulls);
     ++output_row_idx;
   }
 }
@@ -282,13 +291,14 @@ static void StringExprValuesToHS2TColumn(ScalarExprEvaluator* expr_eval, RowBatc
   ReserveSpace(num_rows, output_row_idx, &column->stringVal);
   FOREACH_ROW_LIMIT(batch, start_idx, num_rows, it) {
     Tuple *tuple = it.Get()->GetTuple(0);
+    bool is_null = tuple->IsNull(batch->row_desc()->tuple_descriptors()[0]->slots()[col_index]->null_indicator_offset());
     StringValue *val = tuple->GetStringSlot(batch->row_desc()->tuple_descriptors()[0]->slots()[col_index]->tuple_offset());
     column->stringVal.values.emplace_back();
     if (val != NULL) {
       RawValue::PrintValue(
               val, TYPE_STRING, -1, &(column->stringVal.values.back()));
     }
-    SetNullBit(output_row_idx, val == NULL, &column->stringVal.nulls);
+    SetNullBit(output_row_idx, val == NULL || is_null, &column->stringVal.nulls);
     ++output_row_idx;
   }
 }
@@ -301,13 +311,14 @@ static void CharExprValuesToHS2TColumn(ScalarExprEvaluator* expr_eval,
   ColumnType char_type = ColumnType::CreateCharType(type.types[0].scalar_type.len);
   FOREACH_ROW_LIMIT(batch, start_idx, num_rows, it) {
     Tuple *tuple = it.Get()->GetTuple(0);
+    bool is_null = tuple->IsNull(batch->row_desc()->tuple_descriptors()[0]->slots()[col_index]->null_indicator_offset());
     const char *val = tuple->GetCharSlot(batch->row_desc()->tuple_descriptors()[0]->slots()[col_index]->tuple_offset(), char_type.len);
     column->stringVal.values.emplace_back();
     if (val != NULL) {
       RawValue::PrintValue(
               val, TYPE_CHAR, -1, &(column->stringVal.values.back()));
     }
-    SetNullBit(output_row_idx, val == NULL, &column->stringVal.nulls);
+    SetNullBit(output_row_idx, val == NULL || is_null, &column->stringVal.nulls);
     ++output_row_idx;
   }
 }
@@ -318,6 +329,7 @@ static void DecimalExprValuesToHS2TColumn(ScalarExprEvaluator* expr_eval,
   ReserveSpace(num_rows, output_row_idx, &column->stringVal);
   FOREACH_ROW_LIMIT(batch, start_idx, num_rows, it) {
     Tuple *tuple = it.Get()->GetTuple(0);
+    bool is_null = tuple->IsNull(batch->row_desc()->tuple_descriptors()[0]->slots()[col_index]->null_indicator_offset());
     const ColumnType& decimalType = ColumnType::FromThrift(type);
       switch (decimalType.GetByteSize()) {
         case 4: {
@@ -328,7 +340,7 @@ static void DecimalExprValuesToHS2TColumn(ScalarExprEvaluator* expr_eval,
           } else {
             column->stringVal.values.emplace_back(val4->ToString(decimalType));
           }
-          SetNullBit(output_row_idx, val4 == NULL, &column->stringVal.nulls);
+          SetNullBit(output_row_idx, val4 == NULL || is_null, &column->stringVal.nulls);
           break;
         }
         case 8: {
@@ -339,7 +351,7 @@ static void DecimalExprValuesToHS2TColumn(ScalarExprEvaluator* expr_eval,
           } else {
             column->stringVal.values.emplace_back(val8->ToString(decimalType));
           }
-          SetNullBit(output_row_idx, val8 == NULL, &column->stringVal.nulls);
+          SetNullBit(output_row_idx, val8 == NULL || is_null, &column->stringVal.nulls);
           break;
         }
         case 16: {
@@ -350,7 +362,7 @@ static void DecimalExprValuesToHS2TColumn(ScalarExprEvaluator* expr_eval,
           } else {
             column->stringVal.values.emplace_back(val16->ToString(decimalType));
           }
-          SetNullBit(output_row_idx, val16 == NULL, &column->stringVal.nulls);
+          SetNullBit(output_row_idx, val16 == NULL || is_null, &column->stringVal.nulls);
           break;
         }
         default:

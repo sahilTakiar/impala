@@ -131,7 +131,9 @@ class PlanRootSink : public DataSink {
 
   const RowDescriptor* output_row_desc_;
 
-  RowBatch *intermediate_read_batch_;
+  std::unique_ptr<RowBatch> intermediate_read_batch_ = nullptr;
+
+  int intermediate_read_batch_index_;
 
   ConditionVariable rows_available_;
 };
