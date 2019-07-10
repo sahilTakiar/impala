@@ -641,22 +641,29 @@ class TestAdmissionController(TestAdmissionControllerBase, HS2TestSuite):
   @pytest.mark.execute_serially
   @CustomClusterTestSuite.with_args(
       impalad_args=impalad_admission_ctrl_flags(max_requests=10, max_queued=10,
-          pool_max_mem=10 * 1024 * 1024),
+          pool_max_mem=38 * 1024 * 1024),
       statestored_args=_STATESTORED_ARGS)
   def test_queue_reasons_memory(self):
     """Test that queue details appear in the profile when queued based on memory."""
     # Run a bunch of queries with mem_limit set so that only one can be admitted at a
     # time- one should get admitted immediately, the rest should be dequeued one-by-one.
-    STMT = "select sleep(100)"
+    STMT = "select sleep(1000)"
     TIMEOUT_S = 60
     EXPECTED_REASON = "Latest admission queue reason: Not enough aggregate memory " +\
         "available in pool default-pool with max mem resources 10.00 MB (configured " \
         "statically). Needed 9.00 MB but only 1.00 MB was available."
     NUM_QUERIES = 5
     profiles = self._execute_and_collect_profiles([STMT for i in xrange(NUM_QUERIES)],
-        TIMEOUT_S, {'mem_limit': '9mb'})
+        TIMEOUT_S, {'mem_limit': '36mb'})
+    # TODO not sure why the mem_limit needs to be 36mb which the initial buffer
+    # reservation is only 4mb; it would seem that any query with an non-trivial
+    # initial reservation would fail under this conditions as well
+    # TODO consider if there should be a fast path for trivial queries so that
+    # they don't need any initial buffers? otherwise all queries (even trivial
+    # ones) will require two pages for memory admission
 
     num_reasons = len([profile for profile in profiles if EXPECTED_REASON in profile])
+    print "num_reasons = " + str(num_reasons)
     assert num_reasons == NUM_QUERIES - 1, \
         "All queries except first should have been queued: " + '\n===\n'.join(profiles)
     init_queue_reasons = self.__extract_init_queue_reasons(profiles)
