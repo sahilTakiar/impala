@@ -118,6 +118,8 @@ Status PlanRootSink::Send(RuntimeState* state, RowBatch* batch) {
     return err;
   }
 
+  // TODO consider having two locks - one for the BTS and one for the memory resources; this should allow the Producer
+  // thread to materialize row batches and the Consumer thread to read from the BTS, in parallel
   // Must acquire the lock before using any memory resources in case the query is cancelled the Close is called
   boost::unique_lock<boost::mutex> l(lock_);
   // In case Close was called before the lock was acquired, returned
@@ -221,7 +223,8 @@ Status PlanRootSink::GetNext(
       std::unique_ptr<RowBatch> batch = std::make_unique<RowBatch>(output_row_desc_, state->batch_size(), mem_tracker_.get());
       bool streamEos = false;
       RETURN_IF_ERROR(query_results_->GetNext(batch.get(), &streamEos));
-      if (batch->num_rows() > num_results) {
+      // If num_results is 0 or a negative value, then return all rows in the RowBatch
+      if (num_results > 0 && batch->num_rows() > num_results) {
         intermediate_read_batch_ = std::move(batch);
         intermediate_read_batch_index_ = num_results;
 

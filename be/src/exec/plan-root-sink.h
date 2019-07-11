@@ -133,7 +133,7 @@ class PlanRootSink : public DataSink {
 
   std::unique_ptr<RowBatch> intermediate_read_batch_ = nullptr;
 
-  int intermediate_read_batch_index_;
+  int intermediate_read_batch_index_ = 0;
 
   ConditionVariable rows_available_;
 };

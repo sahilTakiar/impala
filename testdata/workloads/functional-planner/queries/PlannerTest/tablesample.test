@@ -4,7 +4,7 @@ select * from functional.alltypes tablesample system(10) repeatable(1234)
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=32.00MB mem-reservation=32.00KB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=0B mem-reservation=0B thread-reservation=0
+|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
 |
 00:SCAN HDFS [functional.alltypes]
    partitions=3/24 files=3 size=60.68KB
@@ -23,7 +23,7 @@ select * from functional.alltypes tablesample system(50) repeatable(1234)
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=80.00MB mem-reservation=32.00KB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=0B mem-reservation=0B thread-reservation=0
+|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
 |
 00:SCAN HDFS [functional.alltypes]
    partitions=12/24 files=12 size=239.26KB
@@ -44,7 +44,7 @@ where id < 10
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=80.00MB mem-reservation=32.00KB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=0B mem-reservation=0B thread-reservation=0
+|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
 |
 00:SCAN HDFS [functional.alltypes]
    partitions=12/24 files=12 size=239.26KB
@@ -65,7 +65,7 @@ where year = 2009
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=48.00MB mem-reservation=32.00KB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=0B mem-reservation=0B thread-reservation=0
+|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
 |
 00:SCAN HDFS [functional.alltypes]
    partition predicates: `year` = CAST(2009 AS INT)
@@ -85,7 +85,7 @@ select * from functional.alltypes tablesample system(0)
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=0B mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=0B mem-reservation=0B thread-reservation=0
+|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
 |
 00:SCAN HDFS [functional.alltypes]
    partitions=0/24 files=0 size=0B
@@ -104,7 +104,7 @@ select * from functional.alltypes tablesample system(1) repeatable(1234)
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=32.00MB mem-reservation=32.00KB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=0B mem-reservation=0B thread-reservation=0
+|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
 |
 00:SCAN HDFS [functional.alltypes]
    partitions=1/24 files=1 size=19.95KB
@@ -124,7 +124,7 @@ where year = 2010
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=32.00MB mem-reservation=32.00KB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=0B mem-reservation=0B thread-reservation=0
+|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
 |
 00:SCAN HDFS [functional.alltypes]
    partition predicates: `year` = CAST(2010 AS INT)
@@ -144,7 +144,7 @@ select * from functional.alltypes tablesample system (100)
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=128.00MB mem-reservation=32.00KB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=0B mem-reservation=0B thread-reservation=0
+|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
 |
 00:SCAN HDFS [functional.alltypes]
    partitions=24/24 files=24 size=478.45KB
@@ -163,7 +163,7 @@ select id from functional_parquet.alltypes tablesample system(10) repeatable(123
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=16.00MB mem-reservation=16.00KB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=0B mem-reservation=0B thread-reservation=0
+|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
 |
 00:SCAN HDFS [functional_parquet.alltypes]
    partitions=3/24 files=3 size=23.96KB
@@ -184,7 +184,7 @@ select id from functional.alltypes t1 where exists (
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=162.94MB mem-reservation=2.98MB thread-reservation=3 runtime-filters-memory=1.00MB
 PLAN-ROOT SINK
-|  mem-estimate=0B mem-reservation=0B thread-reservation=0
+|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
 |
 02:HASH JOIN [LEFT SEMI JOIN]
 |  hash predicates: t1.id = t2.id
@@ -223,7 +223,7 @@ select id from t
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=32.00MB mem-reservation=32.00KB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=0B mem-reservation=0B thread-reservation=0
+|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
 |
 00:SCAN HDFS [functional.alltypes]
    partitions=3/24 files=3 size=60.68KB
