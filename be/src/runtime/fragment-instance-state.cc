@@ -216,13 +216,11 @@ Status FragmentInstanceState::Prepare() {
             fragment_ctx_.fragment.output_sink.plan_root_sink.row_tuples,
             fragment_ctx_.fragment.output_sink.plan_root_sink.nullable_tuples);
     RETURN_IF_ERROR(DataSink::Create(fragment_ctx_, instance_ctx_, exec_tree_->row_desc(),
-                                     runtime_state_, &sink_, fragment_ctx_.fragment.output_sink.plan_root_sink.resource_profile,
-                                     instance_ctx_.debug_options, query_state_, output_row_desc));
+                                     runtime_state_, &sink_, output_row_desc));
     RETURN_IF_ERROR(sink_->Prepare(runtime_state_, runtime_state_->query_mem_tracker()));
   } else {
     RETURN_IF_ERROR(DataSink::Create(fragment_ctx_, instance_ctx_, exec_tree_->row_desc(),
-                                     runtime_state_, &sink_, exec_tree_->resource_profile(),
-                                     instance_ctx_.debug_options, query_state_, nullptr));
+                                     runtime_state_, &sink_, nullptr));
     RETURN_IF_ERROR(sink_->Prepare(runtime_state_, runtime_state_->instance_mem_tracker()));
   }
   RuntimeProfile* sink_profile = sink_->profile();

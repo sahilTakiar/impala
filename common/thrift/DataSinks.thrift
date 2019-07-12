@@ -23,7 +23,6 @@ include "Exprs.thrift"
 include "Types.thrift"
 include "Descriptors.thrift"
 include "Partitions.thrift"
-include "PlanNodes.thrift"
 
 enum TDataSinkType {
   DATA_STREAM_SINK = 0
@@ -110,7 +109,6 @@ struct TTableSink {
 struct TPlanRootSink {
   1: required list<Types.TTupleId> row_tuples
   2: required list<bool> nullable_tuples
-  3: required PlanNodes.TBackendResourceProfile resource_profile
 }
 
 struct TDataSink {

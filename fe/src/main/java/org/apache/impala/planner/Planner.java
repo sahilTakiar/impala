@@ -419,12 +419,6 @@ public class Planner {
       // Compute the per-node, per-sink and aggregate profiles for the fragment.
       fragment.computeResourceProfile(ctx_.getRootAnalyzer());
 
-      ResourceProfile fragmentResourceProfile = fragment.getResourceProfile();
-      if (fragment.hasSink() && fragment.getSink() instanceof PlanRootSink) {
-        fragmentResourceProfile =
-            fragmentResourceProfile.sum(fragment.getSink().getResourceProfile());
-      }
-
       // Different fragments do not synchronize their Open() and Close(), so the backend
       // does not provide strong guarantees about whether one fragment instance releases
       // resources before another acquires them. Conservatively assume that all fragment
@@ -432,7 +426,7 @@ public class Planner {
       // at the same time, i.e. that the query-wide peak resources is the sum of the
       // per-fragment-instance peak resources.
       maxPerHostPeakResources = maxPerHostPeakResources.sum(
-          fragmentResourceProfile.multiply(fragment.getNumInstancesPerHost(mtDop)));
+          fragment.getResourceProfile().multiply(fragment.getNumInstancesPerHost(mtDop)));
     }
     planRoots.get(0).computePipelineMembership();
 
