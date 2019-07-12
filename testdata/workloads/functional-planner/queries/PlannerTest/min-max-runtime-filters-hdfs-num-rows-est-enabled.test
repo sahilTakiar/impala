@@ -10,7 +10,7 @@ where a.int_col = b.int_col and a.int_col = c.int_col
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=31.88MB mem-reservation=5.89MB thread-reservation=4 runtime-filters-memory=2.00MB
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 05:AGGREGATE [FINALIZE]
 |  output: count(*)

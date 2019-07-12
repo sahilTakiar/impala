@@ -371,7 +371,6 @@ struct TNestedLoopJoinNode {
   2: optional list<Exprs.TExpr> join_conjuncts
 }
 
-// TODO re-factor this out into a Resources.thrift file? or AdmissionControl.thrift file
 // This contains all of the information computed by the plan as part of the resource
 // profile that is needed by the backend to execute.
 struct TBackendResourceProfile {

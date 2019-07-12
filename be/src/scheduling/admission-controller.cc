@@ -383,10 +383,10 @@ void AdmissionController::UpdateHostMemAdmitted(const QuerySchedule& schedule,
 bool AdmissionController::CanAccommodateMaxInitialReservation(
     const QuerySchedule& schedule, const TPoolConfig& pool_cfg,
     string* mem_unavailable_reason) {
-  const int64_t per_backend_mem_limit = schedule.per_backend_mem_limit(); // this is 9 mb
+  const int64_t per_backend_mem_limit = schedule.per_backend_mem_limit();
   if (per_backend_mem_limit > 0) {
     const int64_t max_reservation =
-        ReservationUtil::GetReservationLimitFromMemLimit(per_backend_mem_limit); // this gets set to 0
+        ReservationUtil::GetReservationLimitFromMemLimit(per_backend_mem_limit);
     const int64_t largest_min_mem_reservation = schedule.largest_min_reservation();
     if (largest_min_mem_reservation > max_reservation) {
       const int64_t required_mem_limit =

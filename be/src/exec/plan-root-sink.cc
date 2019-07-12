@@ -37,13 +37,9 @@ namespace impala {
 
 PlanRootSink::PlanRootSink(
     TDataSinkId sink_id, const RowDescriptor* row_desc, RuntimeState* state,
-    const TBackendResourceProfile& resource_profile, const TDebugOptions& debug_options, QueryState* query_state,
     const RowDescriptor* output_row_desc)
   : DataSink(sink_id, row_desc, "PLAN_ROOT_SINK", state),
     num_rows_produced_limit_(state->query_options().num_rows_produced_limit),
-    resource_profile_(resource_profile),
-    debug_options_(debug_options),
-    query_state_(query_state),
     output_row_desc_(output_row_desc) {}
 
 namespace {
@@ -74,32 +70,6 @@ void ValidateCollectionSlots(const RowDescriptor& row_desc, RowBatch* batch) {
 }
 } // namespace
 
-Status PlanRootSink::Open(RuntimeState* state) {
-  RETURN_IF_ERROR(DataSink::Open(state));
-
-  // The ReservationManager's ReservationTracker has to satisfy the condition:
-  // ReservationManager->mem_tracker == mem_tracker()->parent
-  reservation_manager_.Init("ResultSpooling", profile(), state->query_state()->buffer_reservation(),
-      mem_tracker(), resource_profile_, debug_options_);
-
-  RETURN_IF_ERROR(reservation_manager_.ClaimBufferReservation(state));
-
-  // TODO is setting attach_on_read to true correct?
-  query_results_ = std::make_unique<BufferedTupleStream>(state, output_row_desc_, reservation_manager_.buffer_pool_client(),
-          resource_profile_.spillable_buffer_size, resource_profile_.max_row_buffer_size);
-  RETURN_IF_ERROR(query_results_->Init(-1, true));
-  bool got_reservation = false;
-  RETURN_IF_ERROR(query_results_->PrepareForReadWrite(true, &got_reservation));
-  DCHECK(got_reservation) << "Failed to get reservation using buffer poof client: "
-                          << reservation_manager_.buffer_pool_client()->DebugString();
-  return Status::OK();
-}
-
-Status PlanRootSink::Prepare(RuntimeState* state, MemTracker* parent_mem_tracker) {
-  RETURN_IF_ERROR(DataSink::Prepare(state, parent_mem_tracker));
-  return Status::OK();
-}
-
 Status PlanRootSink::Send(RuntimeState* state, RowBatch* batch) {
   SCOPED_TIMER(profile()->total_time_counter());
   // If the batch is empty, we have nothing to do so just return Status::OK()
@@ -129,7 +99,7 @@ Status PlanRootSink::Send(RuntimeState* state, RowBatch* batch) {
   }
 
   // The output_batch we write materialized expressions to
-  RowBatch output_batch(output_row_desc_, state->batch_size(), mem_tracker()); // TODO I think there is a bug here, the query state mem_tracker might be closed before the query is cancelled?
+  std::unique_ptr<RowBatch> output_batch = std::make_unique<RowBatch>(output_row_desc_, state->batch_size(), mem_tracker()); // TODO I think there is a bug here, the query state mem_tracker might be closed before the query is cancelled?
   // or maybe there is something else with cancel going on that is weird
   // TODO this could happen if you releases resources first and then call cancel, which is maybe more likely
   // TODO could be a race condition where the cancel thread starts to cancel the query, the coordinator thread is alerted
@@ -139,28 +109,21 @@ Status PlanRootSink::Send(RuntimeState* state, RowBatch* batch) {
   // Iterate over each TupleRow in the RowBatch
   FOREACH_ROW(batch, 0, batch_itr) {
     TupleRow *row = batch_itr.Get();
-    TupleRow* dst_row = output_batch.GetRow(output_batch.AddRow());
+    TupleRow* dst_row = output_batch->GetRow(output_batch->AddRow());
 
     // Iterate over each Tuple in the TupleRow, create a new Tuple and call MaterializeExprs on it
     for (int i = 0; i < output_row_desc_->tuple_descriptors().size(); i++) {
       auto *tup_desc = output_row_desc_->tuple_descriptors()[i];
       Tuple *insert_tuple = nullptr;
-      insert_tuple = Tuple::Create(tup_desc->byte_size(), output_batch.tuple_data_pool());
-      insert_tuple->MaterializeExprs<false, false>(row, *tup_desc, output_expr_evals_, output_batch.tuple_data_pool());
+      insert_tuple = Tuple::Create(tup_desc->byte_size(), output_batch->tuple_data_pool());
+      insert_tuple->MaterializeExprs<false, false>(row, *tup_desc, output_expr_evals_, output_batch->tuple_data_pool());
       dst_row->SetTuple(i, insert_tuple);
     }
-    output_batch.CommitLastRow();
+    output_batch->CommitLastRow();
   }
-
-  Status status;
-  FOREACH_ROW(&output_batch, 0, batch_itr) {
-    if (UNLIKELY(!query_results_->AddRow(batch_itr.Get(), &status))) {
-      return status;
-    }
-  }
-  num_rows_produced_ += output_batch.num_rows();
+  num_rows_produced_ += output_batch->num_rows();
+  query_results_.emplace_back(move(output_batch));
   rows_available_.NotifyOne();
-  output_batch.Reset();
   expr_results_pool_->Clear(); // Necessary to clear any intermediate allocations made in MaterializeExprs
   return Status::OK();
 }
@@ -229,9 +192,8 @@ Status PlanRootSink::GetNext(
         num_rows_read_ += num_results;
       }
     } else {
-      std::unique_ptr<RowBatch> batch = std::make_unique<RowBatch>(output_row_desc_, state->batch_size(), mem_tracker_.get());
-      bool streamEos = false;
-      RETURN_IF_ERROR(query_results_->GetNext(batch.get(), &streamEos));
+      std::unique_ptr<RowBatch> batch = move(query_results_.front());
+      query_results_.pop_front();
       // If num_results is 0 or a negative value, then return all rows in the RowBatch
       if (num_results > 0 && batch->num_rows() > num_results) {
         intermediate_read_batch_ = std::move(batch);
@@ -256,13 +218,11 @@ void PlanRootSink::ReleaseReceiverResources(RuntimeState* state) {
   // while the FragmentInstanceState is calling Send
   boost::unique_lock<boost::mutex> l(lock_);
   if (is_prs_closed_) return; // TODO needed to guard against a race condition where the cancellation thread and the client thread both end up calling this method
-  VLOG_QUERY << "Closing prs " << this << " stack " << GetStackTrace();
   if (intermediate_read_batch_ != nullptr) {
     intermediate_read_batch_->Reset();
     intermediate_read_batch_.reset();
   }
-  if (query_results_ != nullptr) query_results_->Close(nullptr, RowBatch::FlushMode::NO_FLUSH_RESOURCES);
-  reservation_manager_.Close(state);
+  query_results_.clear();
   DataSink::Close(state);
   is_prs_closed_ = true;
 }

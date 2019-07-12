@@ -65,12 +65,8 @@ class ScalarExprEvaluator;
 class PlanRootSink : public DataSink {
  public:
   PlanRootSink(TDataSinkId sink_id, const RowDescriptor* row_desc, RuntimeState* state,
-          const TBackendResourceProfile& resource_profile, const TDebugOptions& debug_options, QueryState* query_state,
           const RowDescriptor* output_row_desc);
 
-  virtual Status Open(RuntimeState* state);
-
-  virtual Status Prepare(RuntimeState* state, MemTracker* parent_mem_tracker);
 
   /// Sends a new batch. Ownership of 'batch' remains with the sender. Blocks until the
   /// consumer has consumed 'batch' by calling GetNext().
@@ -102,7 +98,8 @@ class PlanRootSink : public DataSink {
   /// Protects all members, including the condition variables.
   boost::mutex lock_;
 
-  std::unique_ptr<BufferedTupleStream> query_results_;
+  typedef std::list<std::unique_ptr<RowBatch>> RowBatchQueue;
+  RowBatchQueue query_results_;
 
   /// State of the sender:
   /// - ROWS_PENDING: the sender is still producing rows; the only non-terminal state
@@ -120,14 +117,6 @@ class PlanRootSink : public DataSink {
 
   /// Limit on the number of rows produced by this query, initialized by the constructor.
   const int64_t num_rows_produced_limit_;
-
-  const TBackendResourceProfile& resource_profile_;
-
-  ReservationManager reservation_manager_;
-
-  const TDebugOptions& debug_options_;
-
-  QueryState* query_state_;
 
   const RowDescriptor* output_row_desc_;
 

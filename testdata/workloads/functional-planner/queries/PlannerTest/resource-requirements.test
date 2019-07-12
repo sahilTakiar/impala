@@ -8,7 +8,7 @@ Analyzed query: SELECT * FROM tpch_parquet.lineitem
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=80.00MB mem-reservation=40.00MB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 00:SCAN HDFS [tpch_parquet.lineitem]
    partitions=1/1 files=3 size=193.60MB
@@ -27,7 +27,7 @@ Analyzed query: SELECT * FROM tpch_parquet.lineitem
 F01:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=10.69MB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 01:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=10.69MB mem-reservation=0B thread-reservation=0
@@ -53,7 +53,7 @@ Analyzed query: SELECT * FROM tpch_parquet.lineitem
 F01:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=11.38MB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 01:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=11.38MB mem-reservation=0B thread-reservation=0
@@ -83,7 +83,7 @@ Analyzed query: SELECT l_comment FROM tpch_parquet.lineitem
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=80.00MB mem-reservation=4.00MB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 00:SCAN HDFS [tpch_parquet.lineitem]
    partitions=1/1 files=3 size=193.60MB
@@ -102,7 +102,7 @@ Analyzed query: SELECT l_comment FROM tpch_parquet.lineitem
 F01:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=10.12MB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 01:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=10.12MB mem-reservation=0B thread-reservation=0
@@ -128,7 +128,7 @@ Analyzed query: SELECT l_comment FROM tpch_parquet.lineitem
 F01:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=10.25MB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 01:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=10.25MB mem-reservation=0B thread-reservation=0
@@ -159,7 +159,7 @@ Analyzed query: SELECT string_col FROM functional_parquet.alltypes
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=16.00MB mem-reservation=16.00KB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 00:SCAN HDFS [functional_parquet.alltypes]
    partitions=24/24 files=24 size=189.28KB
@@ -181,7 +181,7 @@ Analyzed query: SELECT string_col FROM functional_parquet.alltypes
 F01:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=48.00KB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 01:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=48.00KB mem-reservation=0B thread-reservation=0
@@ -210,7 +210,7 @@ Analyzed query: SELECT string_col FROM functional_parquet.alltypes
 F01:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=96.00KB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 01:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=96.00KB mem-reservation=0B thread-reservation=0
@@ -244,7 +244,7 @@ functional_parquet.alltypes
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=16.00MB mem-reservation=24.00KB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 00:SCAN HDFS [functional_parquet.alltypes]
    partitions=24/24 files=24 size=189.28KB
@@ -267,7 +267,7 @@ functional_parquet.alltypes
 F01:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=71.99KB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 01:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=71.99KB mem-reservation=0B thread-reservation=0
@@ -297,7 +297,7 @@ functional_parquet.alltypes
 F01:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=143.99KB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 01:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=143.99KB mem-reservation=0B thread-reservation=0
@@ -330,7 +330,7 @@ Analyzed query: SELECT 'foo' FROM functional_parquet.alltypes
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=1.00MB mem-reservation=16.00KB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 00:SCAN HDFS [functional_parquet.alltypes]
    partitions=24/24 files=24 size=189.28KB
@@ -352,7 +352,7 @@ Analyzed query: SELECT 'foo' FROM functional_parquet.alltypes
 F01:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=16.00KB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 01:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=16.00KB mem-reservation=0B thread-reservation=0
@@ -381,7 +381,7 @@ Analyzed query: SELECT 'foo' FROM functional_parquet.alltypes
 F01:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=24.00KB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 01:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=24.00KB mem-reservation=0B thread-reservation=0
@@ -412,7 +412,7 @@ Analyzed query: SELECT c_nationkey FROM tpch_parquet.customer
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=24.00MB mem-reservation=128.00KB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 00:SCAN HDFS [tpch_parquet.customer]
    partitions=1/1 files=1 size=12.31MB
@@ -435,7 +435,7 @@ Analyzed query: SELECT c_custkey FROM tpch_parquet.customer
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=24.00MB mem-reservation=2.00MB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 00:SCAN HDFS [tpch_parquet.customer]
    partitions=1/1 files=1 size=12.31MB
@@ -461,7 +461,7 @@ Analyzed query: SELECT c_mktsegment FROM functional_parquet.customer_multiblock
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=16.00MB mem-reservation=512.00KB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 00:SCAN HDFS [functional_parquet.customer_multiblock]
    partitions=1/1 files=1 size=482.93KB
@@ -485,7 +485,7 @@ o_orderpriority, o_clerk FROM tpch_nested_parquet.customer.c_orders
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=88.00MB mem-reservation=24.00MB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 00:SCAN HDFS [tpch_nested_parquet.customer.c_orders]
    partitions=1/1 files=4 size=288.99MB
@@ -510,7 +510,7 @@ tpch_nested_parquet.customer.c_orders
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=88.00MB mem-reservation=4.00MB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 00:SCAN HDFS [tpch_nested_parquet.customer.c_orders]
    partitions=1/1 files=4 size=288.99MB
@@ -534,7 +534,7 @@ Analyzed query: SELECT pos FROM tpch_nested_parquet.customer.c_orders
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=88.00MB mem-reservation=4.00MB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 00:SCAN HDFS [tpch_nested_parquet.customer.c_orders]
    partitions=1/1 files=4 size=288.99MB
@@ -563,7 +563,7 @@ c.c_orders
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=88.00MB mem-reservation=32.00MB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 01:SUBPLAN
 |  mem-estimate=0B mem-reservation=0B thread-reservation=0
@@ -613,7 +613,7 @@ tpch_nested_parquet.customer c, c.c_orders
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=88.00MB mem-reservation=8.00MB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 01:SUBPLAN
 |  mem-estimate=0B mem-reservation=0B thread-reservation=0
@@ -664,7 +664,7 @@ c.c_orders
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=88.00MB mem-reservation=8.00MB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 01:SUBPLAN
 |  mem-estimate=0B mem-reservation=0B thread-reservation=0
@@ -714,7 +714,7 @@ Analyzed query: SELECT c_custkey FROM tpch_nested_parquet.customer c, c.c_orders
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=88.00MB mem-reservation=8.00MB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 01:SUBPLAN
 |  mem-estimate=0B mem-reservation=0B thread-reservation=0
@@ -764,7 +764,7 @@ c.c_orders
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=88.00MB mem-reservation=4.00MB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 01:SUBPLAN
 |  mem-estimate=0B mem-reservation=0B thread-reservation=0
@@ -814,7 +814,7 @@ tpch_nested_parquet.customer c, c.c_orders o, o.o_lineitems
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=88.00MB mem-reservation=16.00MB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 01:SUBPLAN
 |  mem-estimate=0B mem-reservation=0B thread-reservation=0
@@ -882,7 +882,7 @@ Analyzed query: SELECT * FROM tpch.lineitem
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=88.00MB mem-reservation=8.00MB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 00:SCAN HDFS [tpch.lineitem]
    partitions=1/1 files=1 size=718.94MB
@@ -901,7 +901,7 @@ Analyzed query: SELECT * FROM tpch.lineitem
 F01:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=10.69MB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 01:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=10.69MB mem-reservation=0B thread-reservation=0
@@ -927,7 +927,7 @@ Analyzed query: SELECT * FROM tpch.lineitem
 F01:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=11.38MB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 01:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=11.38MB mem-reservation=0B thread-reservation=0
@@ -956,7 +956,7 @@ Analyzed query: SELECT l_comment FROM tpch.lineitem
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=88.00MB mem-reservation=8.00MB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 00:SCAN HDFS [tpch.lineitem]
    partitions=1/1 files=1 size=718.94MB
@@ -975,7 +975,7 @@ Analyzed query: SELECT l_comment FROM tpch.lineitem
 F01:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=10.12MB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 01:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=10.12MB mem-reservation=0B thread-reservation=0
@@ -1001,7 +1001,7 @@ Analyzed query: SELECT l_comment FROM tpch.lineitem
 F01:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=10.25MB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 01:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=10.25MB mem-reservation=0B thread-reservation=0
@@ -1031,7 +1031,7 @@ Analyzed query: SELECT * FROM functional.alltypes
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=16.00MB mem-reservation=32.00KB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 00:SCAN HDFS [functional.alltypes]
    partitions=24/24 files=24 size=478.45KB
@@ -1052,7 +1052,7 @@ Analyzed query: SELECT * FROM functional.alltypes
 F01:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=490.49KB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 01:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=490.49KB mem-reservation=0B thread-reservation=0
@@ -1080,7 +1080,7 @@ Analyzed query: SELECT * FROM functional.alltypes
 F01:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=769.49KB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 01:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=769.49KB mem-reservation=0B thread-reservation=0
@@ -1115,7 +1115,7 @@ Analyzed query: SELECT * FROM tpch_avro.orders
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=88.00MB mem-reservation=8.00MB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 00:SCAN HDFS [tpch_avro.orders]
    partitions=1/1 files=2 size=156.92MB
@@ -1136,7 +1136,7 @@ Analyzed query: SELECT * FROM tpch_avro.orders
 F01:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=183.96KB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 01:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=183.96KB mem-reservation=0B thread-reservation=0
@@ -1164,7 +1164,7 @@ Analyzed query: SELECT * FROM tpch_avro.orders
 F01:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=367.96KB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 01:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=367.96KB mem-reservation=0B thread-reservation=0
@@ -1197,7 +1197,7 @@ Analyzed query: SELECT * FROM tpch_avro.orders
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=64.00MB mem-reservation=8.00MB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 00:SCAN HDFS [tpch_avro.orders]
    HDFS partitions=1/1 files=3 size=156.92MB
@@ -1218,7 +1218,7 @@ Analyzed query: SELECT * FROM tpch_avro.orders
 F01:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=275.97KB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 01:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=275.97KB mem-reservation=0B thread-reservation=0
@@ -1246,7 +1246,7 @@ Analyzed query: SELECT * FROM tpch_avro.orders
 F01:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=551.97KB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 01:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=551.97KB mem-reservation=0B thread-reservation=0
@@ -1277,7 +1277,7 @@ Analyzed query: SELECT * FROM tpch_rc.customer
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=32.00MB mem-reservation=8.00MB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 00:SCAN HDFS [tpch_rc.customer]
    partitions=1/1 files=1 size=22.47MB
@@ -1298,7 +1298,7 @@ Analyzed query: SELECT * FROM tpch_rc.customer
 F01:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=81.92KB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 01:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=81.92KB mem-reservation=0B thread-reservation=0
@@ -1326,7 +1326,7 @@ Analyzed query: SELECT * FROM tpch_rc.customer
 F01:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=163.92KB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 01:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=163.92KB mem-reservation=0B thread-reservation=0
@@ -1357,7 +1357,7 @@ Analyzed query: SELECT * FROM tpcds_seq_snap.web_returns
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=16.00MB mem-reservation=8.00MB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 00:SCAN HDFS [tpcds_seq_snap.web_returns]
    partitions=1/1 files=1 size=6.61MB
@@ -1378,7 +1378,7 @@ Analyzed query: SELECT * FROM tpcds_seq_snap.web_returns
 F01:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=107.90KB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 01:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=107.90KB mem-reservation=0B thread-reservation=0
@@ -1406,7 +1406,7 @@ Analyzed query: SELECT * FROM tpcds_seq_snap.web_returns
 F01:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=215.90KB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 01:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=215.90KB mem-reservation=0B thread-reservation=0
@@ -1438,7 +1438,7 @@ Analyzed query: SELECT * FROM tpch_orc_def.lineitem
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=40.00MB mem-reservation=8.00MB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 00:SCAN HDFS [tpch_orc_def.lineitem]
    partitions=1/1 files=6 size=144.66MB
@@ -1463,7 +1463,7 @@ Analyzed query: SELECT * FROM tpch_orc_def.lineitem
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=88.00MB mem-reservation=8.00MB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 00:SCAN HDFS [tpch_orc_def.lineitem]
    HDFS partitions=1/1 files=1 size=142.84MB
@@ -1488,7 +1488,7 @@ Analyzed query: SELECT l_comment FROM tpch_orc_def.lineitem
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=40.00MB mem-reservation=8.00MB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 00:SCAN HDFS [tpch_orc_def.lineitem]
    partitions=1/1 files=6 size=144.66MB
@@ -1512,7 +1512,7 @@ Analyzed query: SELECT l_comment FROM tpch_orc_def.lineitem
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=88.00MB mem-reservation=8.00MB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 00:SCAN HDFS [tpch_orc_def.lineitem]
    HDFS partitions=1/1 files=1 size=142.84MB
@@ -1536,7 +1536,7 @@ Analyzed query: SELECT * FROM functional_orc_def.alltypes
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=16.00MB mem-reservation=88.00KB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 00:SCAN HDFS [functional_orc_def.alltypes]
    partitions=24/24 files=24 size=42.27KB
@@ -1561,7 +1561,7 @@ Analyzed query: SELECT * FROM functional.alltypesmixedformat
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=16.00MB mem-reservation=88.00KB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 00:SCAN HDFS [functional.alltypesmixedformat]
    partitions=4/4 files=4 size=66.12KB
@@ -1583,7 +1583,7 @@ Analyzed query: SELECT * FROM functional.alltypesmixedformat
 F01:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=251.97KB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 01:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=251.97KB mem-reservation=0B thread-reservation=0
@@ -1612,7 +1612,7 @@ Analyzed query: SELECT * FROM functional.alltypesmixedformat
 F01:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=503.97KB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 01:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=503.97KB mem-reservation=0B thread-reservation=0
@@ -1644,7 +1644,7 @@ Analyzed query: SELECT * FROM functional_hbase.alltypes
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=256.00KB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 00:SCAN HBASE [functional_hbase.alltypes]
    stored statistics:
@@ -1663,7 +1663,7 @@ Analyzed query: SELECT * FROM functional_hbase.alltypes
 F01:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=1.17MB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 01:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=1.17MB mem-reservation=0B thread-reservation=0
@@ -1689,7 +1689,7 @@ Analyzed query: SELECT * FROM functional_hbase.alltypes
 F01:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=1.25MB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 01:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=1.25MB mem-reservation=0B thread-reservation=0
@@ -1717,7 +1717,7 @@ Analyzed query: SELECT * FROM functional_hbase.alltypessmall
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=4.00KB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 00:SCAN HBASE [functional_hbase.alltypessmall]
    stored statistics:
@@ -1735,7 +1735,7 @@ Analyzed query: SELECT * FROM functional_hbase.alltypessmall
 F01:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=16.00KB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 01:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=16.00KB mem-reservation=0B thread-reservation=0
@@ -1760,7 +1760,7 @@ Analyzed query: SELECT * FROM functional_hbase.alltypessmall
 F01:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=28.69KB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 01:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=28.69KB mem-reservation=0B thread-reservation=0
@@ -1789,7 +1789,7 @@ Analyzed query: SELECT * FROM functional.alltypes_datasource
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=1.00GB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 00:SCAN DATA SOURCE [functional.alltypes_datasource]
    mem-estimate=1.00GB mem-reservation=0B thread-reservation=0
@@ -1805,7 +1805,7 @@ Analyzed query: SELECT * FROM functional.alltypes_datasource
 F01:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=686.41KB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 01:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=686.41KB mem-reservation=0B thread-reservation=0
@@ -1828,7 +1828,7 @@ Analyzed query: SELECT * FROM functional.alltypes_datasource
 F01:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=806.41KB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 01:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=806.41KB mem-reservation=0B thread-reservation=0
@@ -1855,7 +1855,7 @@ tpch.lineitem
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=88.00MB mem-reservation=8.00MB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 00:UNION
 |  pass-through-operands: all
@@ -1891,7 +1891,7 @@ tpch.lineitem
 F03:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=10.69MB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 03:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=10.69MB mem-reservation=0B thread-reservation=0
@@ -1934,7 +1934,7 @@ tpch.lineitem
 F03:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=11.38MB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 03:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=11.38MB mem-reservation=0B thread-reservation=0
@@ -1982,7 +1982,7 @@ l_orderkey
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=114.00MB mem-reservation=38.00MB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 01:AGGREGATE [FINALIZE]
 |  output: count(*)
@@ -2009,7 +2009,7 @@ l_orderkey
 F02:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=8.01MB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 04:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=8.01MB mem-reservation=0B thread-reservation=0
@@ -2057,7 +2057,7 @@ l_orderkey
 F02:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=8.07MB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 04:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=8.07MB mem-reservation=0B thread-reservation=0
@@ -2107,7 +2107,7 @@ Analyzed query: SELECT count(*) FROM tpch_parquet.lineitem
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=11.00MB mem-reservation=128.00KB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 01:AGGREGATE [FINALIZE]
 |  output: sum_init_zero(tpch_parquet.lineitem.parquet-stats: num_rows)
@@ -2132,7 +2132,7 @@ Analyzed query: SELECT count(*) FROM tpch_parquet.lineitem
 F01:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=10.02MB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 03:AGGREGATE [FINALIZE]
 |  output: count:merge(*)
@@ -2170,7 +2170,7 @@ Analyzed query: SELECT count(*) FROM tpch_parquet.lineitem
 F01:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=10.02MB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 03:AGGREGATE [FINALIZE]
 |  output: count:merge(*)
@@ -2213,7 +2213,7 @@ Analyzed query: SELECT * FROM tpch_parquet.lineitem ORDER BY l_comment ASC
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=118.00MB mem-reservation=52.00MB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 01:SORT
 |  order by: l_comment ASC
@@ -2238,7 +2238,7 @@ Analyzed query: SELECT * FROM tpch_parquet.lineitem ORDER BY l_comment ASC
 F01:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=30.69MB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 02:MERGING-EXCHANGE [UNPARTITIONED]
 |  order by: l_comment ASC
@@ -2271,7 +2271,7 @@ Analyzed query: SELECT * FROM tpch_parquet.lineitem ORDER BY l_comment ASC
 F01:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=61.38MB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 02:MERGING-EXCHANGE [UNPARTITIONED]
 |  order by: l_comment ASC
@@ -2311,7 +2311,7 @@ CAST(100 AS TINYINT)
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=80.02MB mem-reservation=40.00MB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 01:TOP-N [LIMIT=100]
 |  order by: l_comment ASC
@@ -2337,7 +2337,7 @@ CAST(100 AS TINYINT)
 F01:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=76.29KB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 02:MERGING-EXCHANGE [UNPARTITIONED]
 |  order by: l_comment ASC
@@ -2372,7 +2372,7 @@ CAST(100 AS TINYINT)
 F01:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=145.08KB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 02:MERGING-EXCHANGE [UNPARTITIONED]
 |  order by: l_comment ASC
@@ -2411,7 +2411,7 @@ Analyzed query: SELECT * FROM tpch.lineitem INNER JOIN tpch.orders ON l_orderkey
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=445.94MB mem-reservation=51.00MB thread-reservation=3 runtime-filters-memory=1.00MB
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 02:HASH JOIN [INNER JOIN]
 |  hash predicates: l_orderkey = o_orderkey
@@ -2450,7 +2450,7 @@ Analyzed query: SELECT * FROM tpch.lineitem INNER JOIN tpch.orders ON l_orderkey
 F02:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=11.20MB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 04:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=11.20MB mem-reservation=0B thread-reservation=0
@@ -2503,7 +2503,7 @@ Analyzed query: SELECT * FROM tpch.lineitem INNER JOIN tpch.orders ON l_orderkey
 F02:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=12.40MB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 04:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=12.40MB mem-reservation=0B thread-reservation=0
@@ -2568,7 +2568,7 @@ tpch.orders ON l_orderkey = o_orderkey
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=445.94MB mem-reservation=51.00MB thread-reservation=3 runtime-filters-memory=1.00MB
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 02:HASH JOIN [INNER JOIN]
 |  hash predicates: l_orderkey = o_orderkey
@@ -2607,7 +2607,7 @@ tpch.orders ON l_orderkey = o_orderkey
 F03:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=11.20MB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 05:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=11.20MB mem-reservation=0B thread-reservation=0
@@ -2667,7 +2667,7 @@ tpch.orders ON l_orderkey = o_orderkey
 F03:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=12.40MB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 05:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=12.40MB mem-reservation=0B thread-reservation=0
@@ -2738,7 +2738,7 @@ Analyzed query: SELECT * FROM tpch.lineitem, tpch.orders
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=420.49MB mem-reservation=16.00MB thread-reservation=3
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 02:NESTED LOOP JOIN [CROSS JOIN]
 |  mem-estimate=244.49MB mem-reservation=0B thread-reservation=0
@@ -2772,7 +2772,7 @@ Analyzed query: SELECT * FROM tpch.lineitem, tpch.orders
 F02:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=11.20MB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 04:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=11.20MB mem-reservation=0B thread-reservation=0
@@ -2820,7 +2820,7 @@ Analyzed query: SELECT * FROM tpch.lineitem, tpch.orders
 F02:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=12.40MB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 04:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=12.40MB mem-reservation=0B thread-reservation=0
@@ -2879,7 +2879,7 @@ Analyzed query: SELECT * FROM functional.alltypes WHERE FALSE
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=0B mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 00:EMPTYSET
    mem-estimate=0B mem-reservation=0B thread-reservation=0
@@ -2894,7 +2894,7 @@ Analyzed query: SELECT * FROM functional.alltypes WHERE FALSE
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=0B mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 00:EMPTYSET
    mem-estimate=0B mem-reservation=0B thread-reservation=0
@@ -2909,7 +2909,7 @@ Analyzed query: SELECT * FROM functional.alltypes WHERE FALSE
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=0B mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 00:EMPTYSET
    mem-estimate=0B mem-reservation=0B thread-reservation=0
@@ -2929,7 +2929,7 @@ functional.alltypes
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=26.00MB mem-reservation=10.03MB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 02:ANALYTIC
 |  functions: max(tinyint_col)
@@ -2964,7 +2964,7 @@ functional.alltypes
 F02:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=56.26KB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 04:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=56.26KB mem-reservation=0B thread-reservation=0
@@ -3013,7 +3013,7 @@ functional.alltypes
 F02:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=98.26KB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 04:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=98.26KB mem-reservation=0B thread-reservation=0
@@ -3069,7 +3069,7 @@ OVER (ORDER BY o_orderpriority ASC) rnum_priority FROM tpch_parquet.orders
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=68.00MB mem-reservation=48.00MB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 06:ANALYTIC
 |  functions: row_number()
@@ -3132,7 +3132,7 @@ OVER (ORDER BY o_orderpriority ASC) rnum_priority FROM tpch_parquet.orders
 F01:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=48.34MB mem-reservation=32.00MB thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 06:ANALYTIC
 |  functions: row_number()
@@ -3203,7 +3203,7 @@ OVER (ORDER BY o_orderpriority ASC) rnum_priority FROM tpch_parquet.orders
 F01:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=68.68MB mem-reservation=32.00MB thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 06:ANALYTIC
 |  functions: row_number()
@@ -3292,7 +3292,7 @@ tpch_parquet.orders ON l_orderkey = o_orderkey WHERE l_shipmode = 'F'
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=140.16MB mem-reservation=78.00MB thread-reservation=3 runtime-filters-memory=3.00MB
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 00:UNION
 |  pass-through-operands: 04
@@ -3416,7 +3416,7 @@ tpch_parquet.orders ON l_orderkey = o_orderkey WHERE l_shipmode = 'F'
 F09:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=10.21MB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 17:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=10.21MB mem-reservation=0B thread-reservation=0
@@ -3588,7 +3588,7 @@ tpch_parquet.orders ON l_orderkey = o_orderkey WHERE l_shipmode = 'F'
 F09:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=10.41MB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 17:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=10.41MB mem-reservation=0B thread-reservation=0
@@ -3819,7 +3819,7 @@ o_orderdate ASC LIMIT CAST(100 AS TINYINT)
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=419.25MB mem-reservation=111.50MB thread-reservation=5 runtime-filters-memory=3.00MB
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 09:TOP-N [LIMIT=100]
 |  order by: o_totalprice DESC, o_orderdate ASC
@@ -3920,7 +3920,7 @@ o_orderdate ASC LIMIT CAST(100 AS TINYINT)
 F07:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=31.12KB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 17:MERGING-EXCHANGE [UNPARTITIONED]
 |  order by: o_totalprice DESC, o_orderdate ASC
@@ -4079,7 +4079,7 @@ o_orderdate ASC LIMIT CAST(100 AS TINYINT)
 F07:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=59.24KB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 17:MERGING-EXCHANGE [UNPARTITIONED]
 |  order by: o_totalprice DESC, o_orderdate ASC
@@ -4531,7 +4531,7 @@ ORDER BY o1.o_orderkey ASC LIMIT CAST(100 AS TINYINT)) v
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=345.94MB mem-reservation=85.94MB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 09:AGGREGATE [FINALIZE]
 |  group by: c_name, o1.o_orderkey, o2.o_orderstatus
@@ -4608,7 +4608,7 @@ ORDER BY o1.o_orderkey ASC LIMIT CAST(100 AS TINYINT)) v
 F02:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=10.16MB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 12:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=10.16MB mem-reservation=0B thread-reservation=0
@@ -4705,7 +4705,7 @@ ORDER BY o1.o_orderkey ASC LIMIT CAST(100 AS TINYINT)) v
 F02:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=10.32MB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 12:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=10.32MB mem-reservation=0B thread-reservation=0
@@ -4811,7 +4811,7 @@ o_orderpriority ASC) rnum_priority FROM c.c_orders) v
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=136.00MB mem-reservation=104.00MB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 01:SUBPLAN
 |  mem-estimate=0B mem-reservation=0B thread-reservation=0
@@ -4899,7 +4899,7 @@ o_orderpriority ASC) rnum_priority FROM c.c_orders) v
 F01:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=11.11MB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 11:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=11.11MB mem-reservation=0B thread-reservation=0
@@ -4994,7 +4994,7 @@ o_orderpriority ASC) rnum_priority FROM c.c_orders) v
 F01:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=12.21MB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 11:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=12.21MB mem-reservation=0B thread-reservation=0
@@ -5103,7 +5103,7 @@ t1.o_orderkey
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=180.00MB mem-reservation=99.00MB thread-reservation=5 runtime-filters-memory=3.00MB
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 06:HASH JOIN [INNER JOIN]
 |  hash predicates: t1.o_orderkey = t3.o_orderkey
@@ -5184,7 +5184,7 @@ t1.o_orderkey
 F05:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=10.41MB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 11:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=10.41MB mem-reservation=0B thread-reservation=0
@@ -5300,7 +5300,7 @@ t1.o_orderkey
 F05:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=10.82MB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 11:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=10.82MB mem-reservation=0B thread-reservation=0
@@ -5455,7 +5455,7 @@ t4) v2) v1
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=137.99MB mem-reservation=176.00KB thread-reservation=5
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 06:NESTED LOOP JOIN [CROSS JOIN]
 |  mem-estimate=71.53MB mem-reservation=0B thread-reservation=0
@@ -5523,7 +5523,7 @@ t4) v2) v1
 F04:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=10.13MB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 10:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=10.13MB mem-reservation=0B thread-reservation=0
@@ -5619,7 +5619,7 @@ t4) v2) v1
 F04:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=10.27MB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 10:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=10.27MB mem-reservation=0B thread-reservation=0
@@ -5747,7 +5747,7 @@ functional.alltypesagg
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=34.00MB mem-reservation=18.12MB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 04:ANALYTIC
 |  functions: sum(smallint_col)
@@ -5804,7 +5804,7 @@ Analyzed query: SELECT * FROM functional_kudu.alltypes
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=4.88MB mem-reservation=0B thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 00:SCAN KUDU [functional_kudu.alltypes]
    mem-estimate=4.88MB mem-reservation=0B thread-reservation=1
@@ -5822,7 +5822,7 @@ Analyzed query: SELECT int_col FROM functional_kudu.alltypes
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=384.00KB mem-reservation=0B thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 00:SCAN KUDU [functional_kudu.alltypes]
    mem-estimate=384.00KB mem-reservation=0B thread-reservation=1
@@ -5840,7 +5840,7 @@ Analyzed query: SELECT count(*) FROM functional_kudu.alltypes
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=10.00MB mem-reservation=0B thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 01:AGGREGATE [FINALIZE]
 |  output: count(*)
@@ -5864,7 +5864,7 @@ Analyzed query: SELECT * FROM tpch_kudu.nation
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=1.50MB mem-reservation=0B thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 00:SCAN KUDU [tpch_kudu.nation]
    mem-estimate=1.50MB mem-reservation=0B thread-reservation=1
@@ -5885,7 +5885,7 @@ TINYINT)
 F00:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=1.50GB mem-reservation=74.00MB thread-reservation=2
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 01:AGGREGATE [FINALIZE]
 |  group by: tpch_parquet.lineitem.l_orderkey, tpch_parquet.lineitem.l_partkey, tpch_parquet.lineitem.l_suppkey, tpch_parquet.lineitem.l_linenumber, tpch_parquet.lineitem.l_quantity, tpch_parquet.lineitem.l_extendedprice, tpch_parquet.lineitem.l_discount, tpch_parquet.lineitem.l_tax, tpch_parquet.lineitem.l_returnflag, tpch_parquet.lineitem.l_linestatus, tpch_parquet.lineitem.l_shipdate, tpch_parquet.lineitem.l_commitdate, tpch_parquet.lineitem.l_receiptdate, tpch_parquet.lineitem.l_shipinstruct, tpch_parquet.lineitem.l_shipmode, tpch_parquet.lineitem.l_comment
@@ -5912,7 +5912,7 @@ TINYINT)
 F02:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=16.00KB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 04:EXCHANGE [UNPARTITIONED]
 |  limit: 5

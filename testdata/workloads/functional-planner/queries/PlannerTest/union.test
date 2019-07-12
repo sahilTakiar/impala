@@ -4117,7 +4117,7 @@ explain_level=2
 F03:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=33.50KB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 03:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=33.50KB mem-reservation=0B thread-reservation=0
@@ -4165,7 +4165,7 @@ explain_level=2
 F03:PLAN FRAGMENT [UNPARTITIONED] hosts=1 instances=1
 |  Per-Host Resources: mem-estimate=33.50KB mem-reservation=0B thread-reservation=1
 PLAN-ROOT SINK
-|  mem-estimate=4.00MB mem-reservation=4.00MB spill-buffer=2.00MB thread-reservation=0
+|  mem-estimate=0B mem-reservation=0B thread-reservation=0
 |
 03:EXCHANGE [UNPARTITIONED]
 |  mem-estimate=33.50KB mem-reservation=0B thread-reservation=0
