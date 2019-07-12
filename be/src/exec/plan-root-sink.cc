@@ -124,9 +124,17 @@ Status PlanRootSink::Send(RuntimeState* state, RowBatch* batch) {
   boost::unique_lock<boost::mutex> l(lock_);
   // In case Close was called before the lock was acquired, returned
   RETURN_IF_CANCELLED(state);
+  if (is_prs_closed_) {
+    return Status::CANCELLED;
+  }
 
   // The output_batch we write materialized expressions to
-  RowBatch output_batch(output_row_desc_, state->batch_size(), mem_tracker());
+  RowBatch output_batch(output_row_desc_, state->batch_size(), mem_tracker()); // TODO I think there is a bug here, the query state mem_tracker might be closed before the query is cancelled?
+  // or maybe there is something else with cancel going on that is weird
+  // TODO this could happen if you releases resources first and then call cancel, which is maybe more likely
+  // TODO could be a race condition where the cancel thread starts to cancel the query, the coordinator thread is alerted
+  // and then calls ReleaseResources, and then the cancel thread marks the runtime_state as cancelled
+  // so the check above should solve the issue for now, but needs to be cleaned up
 
   // Iterate over each TupleRow in the RowBatch
   FOREACH_ROW(batch, 0, batch_itr) {
@@ -178,6 +186,7 @@ void PlanRootSink::Close(RuntimeState* state) {
 void PlanRootSink::Cancel(RuntimeState* state) {
   DCHECK(state->is_cancelled());
   rows_available_.NotifyOne();
+  VLOG_QUERY << "Calling cancel on PRS " << this << " stack " << GetStackTrace();
   // TODO Need to wake up any sleeping thread and probably set the SenderState? could we release ReceiverResources here as well?
 }
 
@@ -212,7 +221,7 @@ Status PlanRootSink::GetNext(
         RETURN_IF_ERROR(results->AddRows(output_expr_evals_, intermediate_read_batch_.get(), intermediate_read_batch_index_, intermediate_read_batch_->num_rows() - intermediate_read_batch_index_));
         num_rows_read_ += num_results;
         intermediate_read_batch_index_ = 0;
-        intermediate_read_batch_->Reset(); // TODO probably need to clean this up in cancel as well?
+        intermediate_read_batch_->Reset();
         intermediate_read_batch_.reset();
       } else {
         RETURN_IF_ERROR(results->AddRows(output_expr_evals_, intermediate_read_batch_.get(), intermediate_read_batch_index_, num_results));
@@ -246,8 +255,15 @@ void PlanRootSink::ReleaseReceiverResources(RuntimeState* state) {
   // TODO for now we just acquire the lock here as well to avoid race conditions when a Cancel call invokes this method
   // while the FragmentInstanceState is calling Send
   boost::unique_lock<boost::mutex> l(lock_);
+  if (is_prs_closed_) return; // TODO needed to guard against a race condition where the cancellation thread and the client thread both end up calling this method
+  VLOG_QUERY << "Closing prs " << this << " stack " << GetStackTrace();
+  if (intermediate_read_batch_ != nullptr) {
+    intermediate_read_batch_->Reset();
+    intermediate_read_batch_.reset();
+  }
   if (query_results_ != nullptr) query_results_->Close(nullptr, RowBatch::FlushMode::NO_FLUSH_RESOURCES);
   reservation_manager_.Close(state);
   DataSink::Close(state);
+  is_prs_closed_ = true;
 }
 }

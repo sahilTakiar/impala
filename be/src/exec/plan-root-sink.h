@@ -136,6 +136,8 @@ class PlanRootSink : public DataSink {
   int intermediate_read_batch_index_ = 0;
 
   ConditionVariable rows_available_;
+
+  bool is_prs_closed_ = false;
 };
 }
 
