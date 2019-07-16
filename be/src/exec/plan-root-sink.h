@@ -127,6 +127,12 @@ class PlanRootSink : public DataSink {
   ConditionVariable rows_available_;
 
   bool is_prs_closed_ = false;
+
+  int max_row_batches = 10;
+
+  int max_row_batches_bytes = 10 * 1024 * 1024;
+
+  ConditionVariable sender_cv_;
 };
 }
 

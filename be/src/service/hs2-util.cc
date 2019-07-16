@@ -313,10 +313,10 @@ static void CharExprValuesToHS2TColumn(ScalarExprEvaluator* expr_eval,
     Tuple *tuple = it.Get()->GetTuple(0);
     bool is_null = tuple->IsNull(batch->row_desc()->tuple_descriptors()[0]->slots()[col_index]->null_indicator_offset());
     const char *val = tuple->GetCharSlot(batch->row_desc()->tuple_descriptors()[0]->slots()[col_index]->tuple_offset(), char_type.len);
-    column->stringVal.values.emplace_back();
     if (val != NULL) {
-      RawValue::PrintValue(
-              val, TYPE_CHAR, -1, &(column->stringVal.values.back()));
+      column->stringVal.values.emplace_back(val, char_type.len);
+    } else {
+      column->stringVal.values.emplace_back();
     }
     SetNullBit(output_row_idx, val == NULL || is_null, &column->stringVal.nulls);
     ++output_row_idx;

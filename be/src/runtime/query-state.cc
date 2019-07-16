@@ -108,6 +108,8 @@ void QueryState::ReleaseBackendResources() {
   // Clean up temporary files.
   if (file_group_ != nullptr) file_group_->Close();
   // Release any remaining reservation.
+  if (initial_reservations_ != nullptr) initial_reservations_->ReleaseResources();
+  if (buffer_reservation_ != nullptr) buffer_reservation_->Close();
   if (desc_tbl_ != nullptr) desc_tbl_->ReleaseResources();
   // Mark the query as finished on the query MemTracker so that admission control will
   // not consider the whole query memory limit to be "reserved".
@@ -119,8 +121,8 @@ void QueryState::ReleaseBackendResources() {
 }
 
 void QueryState::ReleaseAdmissionControlResources() {
-  if (initial_reservations_ != nullptr) initial_reservations_->ReleaseResources();
-  if (buffer_reservation_ != nullptr) buffer_reservation_->Close();
+//  if (initial_reservations_ != nullptr) initial_reservations_->ReleaseResources();
+//  if (buffer_reservation_ != nullptr) buffer_reservation_->Close();
 }
 
 QueryState::~QueryState() {

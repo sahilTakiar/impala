@@ -122,6 +122,13 @@ Status PlanRootSink::Send(RuntimeState* state, RowBatch* batch) {
     output_batch->CommitLastRow();
   }
   num_rows_produced_ += output_batch->num_rows();
+  while (query_results_.size() >= max_row_batches) {
+    sender_cv_.Wait(l);
+    RETURN_IF_CANCELLED(state);
+    if (is_prs_closed_) {
+      return Status::CANCELLED;
+    }
+  }
   query_results_.emplace_back(move(output_batch));
   rows_available_.NotifyOne();
   expr_results_pool_->Clear(); // Necessary to clear any intermediate allocations made in MaterializeExprs
@@ -149,6 +156,7 @@ void PlanRootSink::Close(RuntimeState* state) {
 void PlanRootSink::Cancel(RuntimeState* state) {
   DCHECK(state->is_cancelled());
   rows_available_.NotifyOne();
+  sender_cv_.NotifyAll();
   VLOG_QUERY << "Calling cancel on PRS " << this << " stack " << GetStackTrace();
   // TODO Need to wake up any sleeping thread and probably set the SenderState? could we release ReceiverResources here as well?
 }
@@ -174,6 +182,11 @@ Status PlanRootSink::GetNext(
   // should not wait because no more rows will be produced
   if (num_rows_produced_ <= num_rows_read_ && sender_state_ != SenderState::EOS && sender_state_ != SenderState::CLOSED_NOT_EOS) {
     rows_available_.Wait(l);
+    // Check if you are cancelled or closed?
+    RETURN_IF_CANCELLED(state);
+    if (is_prs_closed_) {
+      return Status::CANCELLED;
+    }
   }
 
   // rows_available_ might have been woken up by FlushFinal, so double check if there are any more rows to read
@@ -194,6 +207,7 @@ Status PlanRootSink::GetNext(
     } else {
       std::unique_ptr<RowBatch> batch = move(query_results_.front());
       query_results_.pop_front();
+      sender_cv_.NotifyAll();
       // If num_results is 0 or a negative value, then return all rows in the RowBatch
       if (num_results > 0 && batch->num_rows() > num_results) {
         intermediate_read_batch_ = std::move(batch);
