@@ -60,4 +60,25 @@ void PlanRootSink::ValidateCollectionSlots(
   }
 #endif
 }
+
+Status PlanRootSink::Send(RuntimeState* state, RowBatch* batch) {
+  // If the batch is empty, we have nothing to do so just return Status::OK()
+  if (batch->num_rows() == 0) {
+    return Status::OK();
+  }
+  ValidateCollectionSlots(*row_desc_, batch);
+
+  // Check to ensure that the number of rows produced by query execution does not exceed
+  // rows_returned_limit_. Since the PlanRootSink has a single producer, the
+  // num_rows_returned_ value can be verified without acquiring any locks.
+  num_rows_produced_ += batch->num_rows();
+  if (num_rows_produced_limit_ > 0 && num_rows_produced_ > num_rows_produced_limit_) {
+    Status err = Status::Expected(TErrorCode::ROWS_PRODUCED_LIMIT_EXCEEDED,
+        PrintId(state->query_id()),
+        PrettyPrinter::Print(num_rows_produced_limit_, TUnit::NONE));
+    VLOG_QUERY << err.msg().msg();
+    return err;
+  }
+  return Status::OK();
+}
 }

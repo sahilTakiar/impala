@@ -192,6 +192,11 @@ class BlockingQueue : public CacheLineAligned {
     return true;
   }
 
+  /// Returns false if the queue has been closed, true otherwise.
+  bool IsOpen() const {
+    return !shutdown_;
+  }
+
   /// Shut down the queue. Wakes up all threads waiting on BlockingGet or BlockingPut.
   void Shutdown() {
     {

@@ -15,66 +15,47 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef IMPALA_RUNTIME_BLOCKING_QUEUE_H
-#define IMPALA_RUNTIME_BLOCKING_QUEUE_H
-
-#include <list>
-#include <memory>
+#pragma once
 
 #include "runtime/row-batch.h"
-#include "util/blocking-queue.h"
-#include "util/spinlock.h"
 
 namespace impala {
 
 class RowBatch;
 
-/// Functor that returns the bytes in MemPool chunks for a row batch.
-/// Note that we don't include attached BufferPool::BufferHandle objects because this
-/// queue is only used in scan nodes that don't attach buffers.
-struct RowBatchBytesFn {
-  int64_t operator()(const std::unique_ptr<RowBatch>& batch) {
-    return batch->tuple_data_pool()->total_reserved_bytes();
-  }
-};
-
-/// Extends blocking queue for row batches. Row batches have a property that
-/// they must be processed in the order they were produced, even in cancellation
-/// paths. Preceding row batches can contain ptrs to memory in subsequent row batches
-/// and we need to make sure those ptrs stay valid.
-/// Row batches that are added after Shutdown() are queued in a separate "cleanup"
-/// queue, which can be cleaned up during Close().
+/// An interface for buffering RowBatches in a queue. This interface makes no
+/// thread-safety guarantees and different implementations might have different
+/// thread-safety semantics. The class references RowBatches using unique pointers in
+/// order to enforce precise object ownership of RowBatches.
 ///
-/// The queue supports limiting the capacity in terms of bytes enqueued.
-///
-/// All functions are thread safe.
-class RowBatchQueue : public BlockingQueue<std::unique_ptr<RowBatch>, RowBatchBytesFn> {
+/// Prepare must be the first method called on a RowBatchQueue. Once a queue is closed,
+/// GetBatch will return nullptr, and AddBatch will return false. IsEmpty must return true
+/// on a closed queue.
+class RowBatchQueue {
  public:
-  /// 'max_batches' is the maximum number of row batches that can be queued.
-  /// 'max_bytes' is the maximum number of bytes of row batches that can be queued (-1
-  /// means no limit).
-  /// When the queue is full, producers will block.
-  RowBatchQueue(int max_batches, int64_t max_bytes);
-  ~RowBatchQueue();
+  virtual ~RowBatchQueue() {}
 
-  /// Adds a batch to the queue. This is blocking if the queue is full.
-  void AddBatch(std::unique_ptr<RowBatch> batch);
+  /// Prepares the queue so that batches can be added.
+  virtual Status Prepare(RuntimeProfile* profile) = 0;
 
-  /// Gets a row batch from the queue. Returns NULL if there are no more.
-  /// This function blocks.
-  /// Returns NULL after Shutdown().
-  std::unique_ptr<RowBatch> GetBatch();
+  /// Adds the given RowBatch to the queue. Returns true if the batch was successfully
+  /// added, returns false if the queue is full.
+  virtual bool AddBatch(std::unique_ptr<RowBatch> batch) = 0;
 
-  /// Deletes all row batches in cleanup_queue_. Not valid to call AddBatch()
-  /// after this is called.
-  void Cleanup();
+  /// Gets the RowBatch from the head of the queue. Returns null if a batch could not
+  /// successfully be retrieved.
+  virtual std::unique_ptr<RowBatch> GetBatch() = 0;
 
- private:
-  /// Lock protecting cleanup_queue_
-  SpinLock lock_;
+  // Returns true if the queue is empty, false otherwise.
+  virtual bool IsEmpty() const = 0;
 
-  /// Queue of orphaned row batches
-  std::list<std::unique_ptr<RowBatch>> cleanup_queue_;
+  /// Returns true if the queue is full, false otherwise.
+  virtual bool IsFull() const = 0;
+
+  /// Returns false if the queue has been closed, true otherwise.
+  virtual bool IsOpen() const = 0;
+
+  /// Closes the queue and releases any resources held by the queue.
+  virtual void Close() = 0;
 };
 }
-#endif

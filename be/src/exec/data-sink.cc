@@ -35,6 +35,7 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/krpc-data-stream-sender.h"
 #include "runtime/mem-tracker.h"
+#include "runtime/non-blocking-row-batch-queue.h"
 #include "util/container-util.h"
 
 #include "common/names.h"
@@ -109,7 +110,8 @@ Status DataSink::Create(const TPlanFragmentCtx& fragment_ctx,
       break;
     case TDataSinkType::PLAN_ROOT_SINK:
       if (state->query_options().spool_query_results) {
-        *sink = pool->Add(new BufferedPlanRootSink(sink_id, row_desc, state));
+        *sink = pool->Add(new BufferedPlanRootSink(
+            sink_id, row_desc, state, new NonBlockingRowBatchQueue(10)));
       } else {
         *sink = pool->Add(new BlockingPlanRootSink(sink_id, row_desc, state));
       }

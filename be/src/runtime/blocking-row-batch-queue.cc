@@ -15,35 +15,51 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "runtime/row-batch-queue.h"
-
+#include "runtime/blocking-row-batch-queue.h"
 #include "runtime/row-batch.h"
 
 #include "common/names.h"
 
 namespace impala {
 
-RowBatchQueue::RowBatchQueue(int max_batches, int64_t max_bytes)
+BlockingRowBatchQueue::BlockingRowBatchQueue(int max_batches, int64_t max_bytes)
   : BlockingQueue<unique_ptr<RowBatch>,RowBatchBytesFn>(max_batches, max_bytes) {}
 
-RowBatchQueue::~RowBatchQueue() {
+BlockingRowBatchQueue::~BlockingRowBatchQueue() {
   DCHECK(cleanup_queue_.empty());
 }
 
-void RowBatchQueue::AddBatch(unique_ptr<RowBatch> batch) {
+Status BlockingRowBatchQueue::Prepare(RuntimeProfile* profile) {
+  return Status::OK();
+}
+
+bool BlockingRowBatchQueue::AddBatch(unique_ptr<RowBatch> batch) {
   if (!BlockingPut(move(batch))) {
     lock_guard<SpinLock> l(lock_);
     cleanup_queue_.push_back(move(batch));
   }
+  return true;
 }
 
-unique_ptr<RowBatch> RowBatchQueue::GetBatch() {
+unique_ptr<RowBatch> BlockingRowBatchQueue::GetBatch() {
   unique_ptr<RowBatch> result;
   if (BlockingGet(&result)) return result;
   return unique_ptr<RowBatch>();
 }
 
-void RowBatchQueue::Cleanup() {
+bool BlockingRowBatchQueue::IsFull() const {
+  return AtCapacity();
+}
+
+bool BlockingRowBatchQueue::IsEmpty() const {
+  return Size() == 0;
+}
+
+bool BlockingRowBatchQueue::IsOpen() const {
+  return BlockingQueue::IsOpen();
+}
+
+void BlockingRowBatchQueue::Cleanup() {
   unique_ptr<RowBatch> batch = nullptr;
   while ((batch = GetBatch()) != nullptr) {
     batch.reset();
@@ -51,5 +67,9 @@ void RowBatchQueue::Cleanup() {
 
   lock_guard<SpinLock> l(lock_);
   cleanup_queue_.clear();
+}
+
+void BlockingRowBatchQueue::Close() {
+  Shutdown();
 }
 }

@@ -98,6 +98,9 @@ class PlanRootSink : public DataSink {
 
   /// Limit on the number of rows produced by this query, initialized by the constructor.
   const int64_t num_rows_produced_limit_;
+
+  /// Updated by Send() to indicate the total number of rows produced by query execution.
+  int64_t num_rows_produced_ = 0;
 };
 }
 

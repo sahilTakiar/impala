@@ -21,9 +21,9 @@
 #include <boost/bind.hpp>
 
 #include "exprs/scalar-expr.h"
+#include "runtime/blocking-row-batch-queue.h"
 #include "runtime/io/disk-io-mgr.h"
 #include "runtime/query-state.h"
-#include "runtime/row-batch-queue.h"
 #include "runtime/row-batch.h"
 #include "runtime/runtime-filter.inline.h"
 #include "runtime/runtime-state.h"
@@ -260,7 +260,7 @@ void ScanNode::ScannerThreadState::Open(
           << "' in fragment instance '" << PrintId(state->fragment_instance_id())
           << "': " << max_row_batches;
   batch_queue_.reset(
-      new RowBatchQueue(max_row_batches, FLAGS_max_queued_row_batch_bytes));
+      new BlockingRowBatchQueue(max_row_batches, FLAGS_max_queued_row_batch_bytes));
 
   // Start measuring the scanner thread concurrency only once the node is opened.
   average_concurrency_ = parent->runtime_profile()->AddSamplingCounter(
