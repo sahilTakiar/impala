@@ -16,6 +16,16 @@
 # under the License.
 
 from tests.common.impala_test_suite import ImpalaTestSuite
+from tests.common.test_vector import ImpalaTestDimension
+from tests.util.cancel_util import cancel_query_validate_state
+
+CANCELLATION_QUERIES = ['select l_returnflag from lineitem',
+                        'select * from lineitem limit 50',
+                        'select * from lineitem order by l_orderkey']
+
+CANCEL_DELAY_IN_SECONDS = [0, 0.01, 0.1, 1, 4]
+
+JOIN_BEFORE_CLOSE = [False, True]
 
 
 class TestResultSpooling(ImpalaTestSuite):
@@ -23,10 +33,63 @@ class TestResultSpooling(ImpalaTestSuite):
   def get_workload(cls):
     return 'functional-query'
 
-  def test_result_spooling(self):
-    """Tests that setting SPOOL_QUERY_RESULTS = true for simple queries returns the
-    correct number of results."""
-    query_opts = {"spool_query_results": "true"}
-    query = "select * from functional.alltypes limit 10"
-    result = self.execute_query_expect_success(self.client, query, query_opts)
-    assert(len(result.data) == 10)
+  def test_result_spooling(self, vector):
+    self.run_test_case('QueryTest/result-spooling', vector)
+
+  def test_multi_batches(self, vector):
+    """Validates that reading multiple row batches works when result spooling is
+       enabled."""
+    vector.get_value('exec_option')['batch_size'] = 10
+    self.validate_query("select id from functional.alltypes order by id limit 100",
+        vector.get_value('exec_option'))
+
+  def validate_query(self, query, exec_options):
+    """Compares the results of the given query with and without result spooling
+       enabled."""
+    result = self.execute_query(query, exec_options)
+    assert result.success, "Failed to run %s when result spooling is disabled" % query
+    base_data = result.data
+    exec_options['spool_query_results'] = 'true'
+    result = self.execute_query(query, exec_options)
+    assert result.success, "Failed to run %s when result spooling is enabled" % query
+    assert len(result.data) == len(base_data), "%s returned a different number of " \
+                                               "results when result spooling was " \
+                                               "enabled" % query
+    assert result.data == base_data, "%s returned different results when result " \
+                                     "spooling was enabled" % query
+
+
+class TestResultSpoolingCancellation(ImpalaTestSuite):
+  @classmethod
+  def get_workload(cls):
+    return 'tpch'
+
+  @classmethod
+  def add_test_dimensions(cls):
+    super(TestResultSpoolingCancellation, cls).add_test_dimensions()
+    cls.ImpalaTestMatrix.add_dimension(ImpalaTestDimension('query',
+        *CANCELLATION_QUERIES))
+    cls.ImpalaTestMatrix.add_dimension(ImpalaTestDimension('cancel_delay',
+        *CANCEL_DELAY_IN_SECONDS))
+    cls.ImpalaTestMatrix.add_dimension(ImpalaTestDimension('join_before_close',
+        *JOIN_BEFORE_CLOSE))
+
+    # Result spooling should is independent of file format, so only testing for Parquet
+    # in order to avoid a test dimension explosion.
+    cls.ImpalaTestMatrix.add_constraint(lambda v:
+        v.get_value('table_format').file_format == 'parquet' and
+        v.get_value('table_format').compression_codec == 'none')
+
+  def test_cancellation(self, vector):
+    cancel_query_validate_state(self.client, vector.get_value('query'),
+        vector.get_value('exec_option'), vector.get_value('table_format'),
+        vector.get_value('cancel_delay'))
+
+
+class TestResultSpoolingConcurrency(ImpalaTestSuite):
+  @classmethod
+  def get_workload(cls):
+    return 'functional-query'
+
+  def test_concurrency(self):
+    pass
