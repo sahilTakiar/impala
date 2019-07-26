@@ -336,6 +336,8 @@ class AdmissionController {
   /// This does not block.
   void ReleaseQuery(const QuerySchedule& schedule, int64_t peak_mem_consumption);
 
+  void ReleaseQueryBackend(const QuerySchedule& schedule, int64_t peak_mem_consumption, const TNetworkAddress& host_addr);
+
   /// Registers the request queue topic with the statestore.
   Status Init();
 
@@ -482,7 +484,8 @@ class AdmissionController {
     /// Updates the pool stats when the request represented by 'schedule' is admitted.
     void Admit(const QuerySchedule& schedule);
     /// Updates the pool stats when the request represented by 'schedule' is released.
-    void Release(const QuerySchedule& schedule, int64_t peak_mem_consumption);
+    void ReleaseQuery(const QuerySchedule& schedule, int64_t peak_mem_consumption);
+    void ReleaseQueryBackend(const QuerySchedule& schedule, int64_t peak_mem_consumption);
     /// Updates the pool stats when the request represented by 'schedule' is queued.
     void Queue();
     /// Updates the pool stats when the request represented by 'schedule' is dequeued.
@@ -805,6 +808,9 @@ class AdmissionController {
   /// 'num_queries' may be negative when a query completes.
   void UpdateHostStats(
       const QuerySchedule& schedule, int64_t per_node_mem, int64_t num_queries);
+
+  void UpdateHostStatsForQueryBackend(const QuerySchedule& schedule, int64_t per_node_mem,
+      int64_t num_queries, const TNetworkAddress& host_addr);
 
   /// Rejection happens in several stages
   /// 1) Based on static pool configuration

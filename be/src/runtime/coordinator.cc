@@ -735,6 +735,17 @@ Status Coordinator::UpdateBackendExecStatus(const ReportExecStatusRequestPB& req
     }
     // We've applied all changes from the final status report - notify waiting threads.
     discard_result(backend_exec_complete_barrier_->Notify());
+
+    ResourceUtilization utilization = backend_state->ComputeResourceUtilization();
+    AdmissionController* admission_controller =
+        ExecEnv::GetInstance()->admission_controller();
+    DCHECK(admission_controller != nullptr);
+    admission_controller->ReleaseQueryBackend(
+        schedule_, utilization.peak_per_host_mem_consumption, backend_state->impalad_address());
+    LOG(INFO) << "Release admission control resources for query_id="
+              << PrintId(query_id()) << " and "
+              << " backend_idx=" << coord_state_idx
+              << " released bytes = " << utilization.peak_per_host_mem_consumption;
   }
   // If query execution has terminated, return a cancelled status to force the fragment
   // instance to stop executing.

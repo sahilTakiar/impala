@@ -107,9 +107,9 @@ class TestResultSpoolingCancellation(ImpalaTestSuite):
     vector.get_value('exec_option')['spool_query_results'] = 'true'
     handle = None
     try:
-      handle = self.execute_query_async(vector.get_value('query'),
+      handle = self.execute_query_async("select * from tpch.lineitem order by l_orderkey limit 5120",
           vector.get_value('exec_option'))
-      sleep(vector.get_value('cancel_delay'))
+      sleep(60000)#sleep(vector.get_value('cancel_delay'))
       cancel_result = self.client.cancel(handle)
       assert cancel_result.status_code == 0,\
           'Unexpected status code from cancel request: %s' % cancel_result

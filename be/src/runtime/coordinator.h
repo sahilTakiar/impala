@@ -211,8 +211,6 @@ class Coordinator { // NOLINT: The member variables could be re-ordered to save 
     }
   };
 
-  /// Aggregate resource utilization for the query (i.e. across all backends based on the
-  /// latest status reports received from those backends).
   ResourceUtilization ComputeQueryResourceUtilization();
 
   /// Return the backends in 'candidates' that still have at least one fragment instance

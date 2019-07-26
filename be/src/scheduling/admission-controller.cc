@@ -342,13 +342,8 @@ void AdmissionController::PoolStats::Admit(const QuerySchedule& schedule) {
   metrics_.total_admitted->Increment(1L);
 }
 
-void AdmissionController::PoolStats::Release(
+void AdmissionController::PoolStats::ReleaseQuery(
     const QuerySchedule& schedule, int64_t peak_mem_consumption) {
-  int64_t cluster_mem_admitted = schedule.GetClusterMemoryToAdmit();
-  DCHECK_GT(cluster_mem_admitted, 0);
-  local_mem_admitted_ -= cluster_mem_admitted;
-  metrics_.local_mem_admitted->Increment(-cluster_mem_admitted);
-
   agg_num_running_ -= 1;
   metrics_.agg_num_running->Increment(-1L);
 
@@ -358,11 +353,19 @@ void AdmissionController::PoolStats::Release(
   metrics_.total_released->Increment(1L);
   DCHECK_GE(local_stats_.num_admitted_running, 0);
   DCHECK_GE(agg_num_running_, 0);
-  DCHECK_GE(local_mem_admitted_, 0);
+
   int64_t histogram_bucket =
       BitUtil::RoundUp(peak_mem_consumption, HISTOGRAM_BIN_SIZE) / HISTOGRAM_BIN_SIZE;
   histogram_bucket = std::max(std::min(histogram_bucket, HISTOGRAM_NUM_OF_BINS), 1L) - 1;
   peak_mem_histogram_[histogram_bucket] = ++(peak_mem_histogram_[histogram_bucket]);
+}
+
+void AdmissionController::PoolStats::ReleaseQueryBackend(
+    const QuerySchedule& schedule, int64_t peak_mem_consumption) {
+  int64_t backend_mem_admitted = schedule.per_backend_mem_to_admit();
+  DCHECK_GT(backend_mem_admitted, 0);
+  local_mem_admitted_ -= backend_mem_admitted;
+  metrics_.local_mem_admitted->Increment(-backend_mem_admitted);
 }
 
 void AdmissionController::PoolStats::Queue() {
@@ -389,6 +392,24 @@ void AdmissionController::PoolStats::Dequeue(bool timed_out) {
   } else {
     metrics_.total_dequeued->Increment(1L);
   }
+}
+
+void AdmissionController::UpdateHostStatsForQueryBackend(const QuerySchedule& schedule,
+    int64_t per_node_mem, int64_t num_queries, const TNetworkAddress& host_addr) {
+  DCHECK_NE(per_node_mem, 0);
+  DCHECK(num_queries == 1 || num_queries == -1) << "Invalid number of queries: "
+                                                << num_queries;
+  const string host = TNetworkAddressToString(host_addr);
+  VLOG_ROW << "Update admitted mem reserved for host=" << host
+           << " prev=" << PrintBytes(host_stats_[host].mem_admitted)
+           << " new=" << PrintBytes(host_stats_[host].mem_admitted + per_node_mem);
+  host_stats_[host].mem_admitted += per_node_mem;
+  DCHECK_GE(host_stats_[host].mem_admitted, 0);
+  VLOG_ROW << "Update admitted queries for host=" << host
+           << " prev=" << host_stats_[host].num_admitted
+           << " new=" << host_stats_[host].num_admitted + num_queries;
+  host_stats_[host].num_admitted += num_queries;
+  DCHECK_GE(host_stats_[host].num_admitted, 0);
 }
 
 void AdmissionController::UpdateHostStats(
@@ -891,11 +912,26 @@ void AdmissionController::ReleaseQuery(
   {
     lock_guard<mutex> lock(admission_ctrl_lock_);
     PoolStats* stats = GetPoolStats(schedule);
-    stats->Release(schedule, peak_mem_consumption);
-    UpdateHostStats(schedule, -schedule.per_backend_mem_to_admit(), -1);
+    stats->ReleaseQuery(schedule, peak_mem_consumption);
     pools_for_updates_.insert(pool_name);
-    VLOG_RPC << "Released query id=" << PrintId(schedule.query_id()) << " "
+    VLOG_QUERY << "Released query id=" << PrintId(schedule.query_id()) << " "
              << stats->DebugString();
+  }
+  dequeue_cv_.NotifyOne();
+}
+
+void AdmissionController::ReleaseQueryBackend(const QuerySchedule& schedule,
+    int64_t peak_mem_consumption, const TNetworkAddress& host_addr) {
+  const string& pool_name = schedule.request_pool();
+  {
+    lock_guard<mutex> lock(admission_ctrl_lock_);
+    PoolStats* stats = GetPoolStats(schedule);
+    stats->ReleaseQueryBackend(schedule, peak_mem_consumption);
+    UpdateHostStatsForQueryBackend(
+        schedule, -schedule.per_backend_mem_to_admit(), -1, host_addr);
+    pools_for_updates_.insert(pool_name);
+    VLOG_QUERY << "Released query id=" << PrintId(schedule.query_id()) << " "
+               << stats->DebugString();
   }
   dequeue_cv_.NotifyOne();
 }
