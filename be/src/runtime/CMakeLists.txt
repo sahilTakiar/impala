@@ -72,6 +72,7 @@ add_library(Runtime
   sorted-run-merger.cc
   sorter.cc
   sorter-ir.cc
+  spillable-row-batch-queue.cc
   string-value.cc
   thread-resource-mgr.cc
   timestamp-parse-util.cc

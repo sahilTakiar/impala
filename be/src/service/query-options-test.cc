@@ -516,3 +516,48 @@ TEST(QueryOptions, CompressionCodec) {
 #undef ENTRIES
 #undef ENTRY
 }
+
+// Tests for setting of MAX_PINNED_RESULT_SPOOLING_MEMORY and
+// MAX_UNPINNED_RESULT_SPOOLING_MEMORY. Setting of these options must maintain the
+// condition 'MAX_PINNED_RESULT_SPOOLING_MEMORY <= MAX_UNPINNED_RESULT_SPOOLING_MEMORY'.
+// A value of 0 for each of these parameters means the memory is unbounded.
+TEST(QueryOptions, ResultSpooling) {
+  {
+    TQueryOptions options;
+    // Setting the pinned memory to 0 (unbounded) should fail with the default unpinned
+    // value.
+    options.__set_max_pinned_result_spooling_memory(0);
+    EXPECT_FALSE(ValidateQueryOptions(&options).ok());
+    // Setting the unpinned memory to 0 (unbounded) should always work.
+    options.__set_max_unpinned_result_spooling_memory(0);
+    EXPECT_TRUE(ValidateQueryOptions(&options).ok());
+    // Setting the pinned memory to 0 (unbounded) should work if the unpinned memory is
+    // unbounded as well.
+    options.__set_max_pinned_result_spooling_memory(0);
+    EXPECT_TRUE(ValidateQueryOptions(&options).ok());
+    // Setting the unpinned memory to a bounded value should fail if the pinned memory is
+    // bounded.
+    options.__set_max_unpinned_result_spooling_memory(1);
+    EXPECT_FALSE(ValidateQueryOptions(&options).ok());
+  }
+
+  {
+    TQueryOptions options;
+    // Setting the unpinned memory to a value lower than the pinned memory should fail.
+    options.__set_max_pinned_result_spooling_memory(2);
+    EXPECT_TRUE(ValidateQueryOptions(&options).ok());
+    options.__set_max_unpinned_result_spooling_memory(1);
+    EXPECT_FALSE(ValidateQueryOptions(&options).ok());
+  }
+
+  {
+    TQueryOptions options;
+    // Setting the pinned memory to a value higher than the unpinned memory should fail.
+    options.__set_max_pinned_result_spooling_memory(1);
+    EXPECT_TRUE(ValidateQueryOptions(&options).ok());
+    options.__set_max_unpinned_result_spooling_memory(2);
+    EXPECT_TRUE(ValidateQueryOptions(&options).ok());
+    options.__set_max_pinned_result_spooling_memory(3);
+    EXPECT_FALSE(ValidateQueryOptions(&options).ok());
+  }
+}

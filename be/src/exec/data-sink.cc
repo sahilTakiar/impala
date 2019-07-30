@@ -110,7 +110,9 @@ Status DataSink::Create(const TPlanFragmentCtx& fragment_ctx,
       break;
     case TDataSinkType::PLAN_ROOT_SINK:
       if (state->query_options().spool_query_results) {
-        *sink = pool->Add(new BufferedPlanRootSink(sink_id, row_desc, state));
+        *sink = pool->Add(new BufferedPlanRootSink(sink_id, row_desc, state,
+            fragment_ctx.fragment.output_sink.plan_root_sink.resource_profile,
+            fragment_instance_ctx.debug_options));
       } else {
         *sink = pool->Add(new BlockingPlanRootSink(sink_id, row_desc, state));
       }
