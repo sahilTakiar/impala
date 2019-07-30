@@ -808,6 +808,22 @@ Status impala::SetQueryOption(const string& key, const string& value,
         query_options->__set_spool_query_results(IsTrue(value));
         break;
       }
+      case TImpalaQueryOptions::MAX_PINNED_RESULT_SPOOLING_MEMORY: {
+        int64_t max_pinned_result_spooling_memory;
+        RETURN_IF_ERROR(ParseMemValue(value, "max pinned result spooling memory",
+            &max_pinned_result_spooling_memory));
+        query_options->__set_max_pinned_result_spooling_memory(
+            max_pinned_result_spooling_memory);
+        break;
+      }
+      case TImpalaQueryOptions::MAX_UNPINNED_RESULT_SPOOLING_MEMORY: {
+        int64_t max_unpinned_result_spooling_memory;
+        RETURN_IF_ERROR(ParseMemValue(value, "max unpinned result spooling memory",
+            &max_unpinned_result_spooling_memory));
+        query_options->__set_max_unpinned_result_spooling_memory(
+            max_unpinned_result_spooling_memory);
+        break;
+      }
       case TImpalaQueryOptions::DEFAULT_TRANSACTIONAL_TYPE: {
         TTransactionalType::type enum_type;
         RETURN_IF_ERROR(GetThriftEnum(value, "default transactional type",
@@ -882,6 +898,42 @@ Status impala::ParseQueryOptions(const string& options, TQueryOptions* query_opt
         set_query_options_mask));
   }
   if (errorStatus.msg().details().size() > 0) return errorStatus;
+  return Status::OK();
+}
+
+Status impala::ValidateQueryOptions(TQueryOptions* query_options) {
+  // Validate that max_pinned_result_spooling_memory <=
+  // max_unpinned_result_spooling_memory (a value of 0 means memory is unbounded).
+  if (query_options->max_pinned_result_spooling_memory == 0
+      && query_options->max_unpinned_result_spooling_memory != 0) {
+    return Status("Cannot set max_pinned_result_spooling_memory to 0 (unbounded) unless "
+                  "max_unpinned_result_spooling_memory is set to 0 (unbounded) as well.");
+  }
+  if (query_options->max_unpinned_result_spooling_memory != 0
+      && query_options->max_pinned_result_spooling_memory
+          > query_options->max_unpinned_result_spooling_memory) {
+    return Status(
+        Substitute("max_pinned_result_spooling_memory '$0' must be greater than "
+                   "max_unpinned_result_spooling_memory '$1'",
+            query_options->max_pinned_result_spooling_memory,
+            query_options->max_unpinned_result_spooling_memory));
+  }
+  if (query_options->max_pinned_result_spooling_memory == 0
+      && query_options->max_unpinned_result_spooling_memory != 0) {
+    return Status(
+        Substitute("Cannot set max_unpinned_result_spooling_memory to '$0' because "
+                   "max_pinned_result_spooling_memory is set to 0 (unbounded).",
+            query_options->max_unpinned_result_spooling_memory));
+  }
+  if (query_options->max_unpinned_result_spooling_memory != 0
+      && query_options->max_unpinned_result_spooling_memory
+          < query_options->max_pinned_result_spooling_memory) {
+    return Status(
+        Substitute("max_unpinned_result_spooling_memory '$0' must be greater than "
+                   "max_pinned_result_spooling_memory '$1'",
+            query_options->max_unpinned_result_spooling_memory,
+            query_options->max_pinned_result_spooling_memory));
+  }
   return Status::OK();
 }
 

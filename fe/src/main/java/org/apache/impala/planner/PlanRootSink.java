@@ -20,7 +20,9 @@ package org.apache.impala.planner;
 import org.apache.impala.thrift.TDataSink;
 import org.apache.impala.thrift.TDataSinkType;
 import org.apache.impala.thrift.TExplainLevel;
+import org.apache.impala.thrift.TPlanRootSink;
 import org.apache.impala.thrift.TQueryOptions;
+
 
 /**
  * Sink for the root of a query plan that produces result rows. Allows coordination
@@ -28,6 +30,11 @@ import org.apache.impala.thrift.TQueryOptions;
  * client, despite both executing concurrently.
  */
 public class PlanRootSink extends DataSink {
+
+  // The default estimated memory consumption is 10 mb. Only used if statistics are not
+  // available. 10 mb should be sufficient to buffer results from most queries. See
+  // IMPALA-4268 for details on how this value was chosen.
+  private static final long DEFAULT_RESULT_SPOOLING_ESTIMATED_MEMORY = 10 * 1024 * 1024;
 
   @Override
   public void appendSinkExplainString(String prefix, String detailPrefix,
@@ -40,14 +47,61 @@ public class PlanRootSink extends DataSink {
     return "ROOT";
   }
 
+  /**
+   * Computes and sets the {@link ResourceProfile} for this PlanRootSink. If result
+   * spooling is disabled, a ResourceProfile is returned with no reservation or buffer
+   * sizes, and the estimated memory consumption is 0. Without result spooling, no rows
+   * get buffered, and only a single RowBatch is passed to the client at a time. Given
+   * that RowBatch memory is currently unreserved, no reservation is necessary. If
+   * SPOOL_QUERY_RESULTS is true, then the ResourceProfile sets a min/max resevation,
+   * estimated memory consumption, max buffer size, and spillable buffer size. The
+   * 'memEstimateBytes' (estimated memory consumption in bytes) is set by taking the
+   * estimated number of input rows into the sink and multiplying it by the estimated
+   * average row size. The estimated number of input rows is derived from the cardinality
+   * of the associated fragment's root node. If the cardinality or the average row size
+   * are not available, a default value is used. The minimum reservation is set 2x the
+   * default spillable buffer size to account for the read and write page in the
+   * BufferedTupleStream used by the backend plan-root-sink. The maximum reservation is
+   * set to the query-level config MAX_PINNED_RESULT_SPOOLING_MEMORY.
+   */
   @Override
   public void computeResourceProfile(TQueryOptions queryOptions) {
-    // TODO: add a memory estimate
-    resourceProfile_ = ResourceProfile.noReservation(0);
+    if (queryOptions.isSpool_query_results()) {
+      long bufferSize = queryOptions.getDefault_spillable_buffer_size();
+      long maxRowBufferSize = PlanNode.computeMaxSpillableBufferSize(
+          bufferSize, queryOptions.getMax_row_size());
+      long minMemReservationBytes = 2 * bufferSize;
+      long maxMemReservationBytes = queryOptions.getMax_pinned_result_spooling_memory();
+
+      PlanNode inputNode = fragment_.getPlanRoot();
+      int numInstances = fragment_.getNumInstances(queryOptions.getMt_dop());
+
+      long memEstimateBytes;
+      if (inputNode.getCardinality() == -1 || inputNode.getAvgRowSize() == -1) {
+        memEstimateBytes = DEFAULT_RESULT_SPOOLING_ESTIMATED_MEMORY;
+      } else {
+        long perInstanceInputCardinality =
+            Math.max(1L, inputNode.getCardinality() / numInstances);
+        memEstimateBytes =
+            (long) Math.ceil(perInstanceInputCardinality * inputNode.getAvgRowSize());
+      }
+      maxMemReservationBytes = Math.max(maxMemReservationBytes, minMemReservationBytes);
+      resourceProfile_ = new ResourceProfileBuilder()
+                             .setMemEstimateBytes(memEstimateBytes)
+                             .setMinMemReservationBytes(minMemReservationBytes)
+                             .setMaxMemReservationBytes(maxMemReservationBytes)
+                             .setMaxRowBufferBytes(maxRowBufferSize)
+                             .setSpillableBufferBytes(bufferSize)
+                             .build();
+    } else {
+      resourceProfile_ = ResourceProfile.noReservation(0);
+    }
   }
 
   @Override
   protected void toThriftImpl(TDataSink tsink) {
+    TPlanRootSink tPlanRootSink = new TPlanRootSink(resourceProfile_.toThrift());
+    tsink.setPlan_root_sink(tPlanRootSink);
   }
 
   @Override
