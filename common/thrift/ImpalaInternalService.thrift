@@ -379,6 +379,12 @@ struct TQueryOptions {
   // the cost of parsing and analyzing the statement, which is required to enforce the
   // statement expression limit.
   89: optional i32 max_statement_length_bytes = 16777216
+
+  // See comment in ImpalaService.thrift
+  90: optional i64 max_result_spooling_mem = 104857600;
+
+  // See comment in ImpalaService.thrift
+  91: optional i64 max_spilled_result_spooling_mem = 1073741824;
 }
 
 // Impala currently has two types of sessions: Beeswax and HiveServer2
