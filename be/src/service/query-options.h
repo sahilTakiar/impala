@@ -47,7 +47,7 @@ typedef std::unordered_map<string, beeswax::TQueryOptionLevel::type>
 // time we add or remove a query option to/from the enum TImpalaQueryOptions.
 #define QUERY_OPTS_TABLE\
   DCHECK_EQ(_TImpalaQueryOptions_VALUES_TO_NAMES.size(),\
-      TImpalaQueryOptions::SPOOL_QUERY_RESULTS + 1);\
+      TImpalaQueryOptions::MAX_UNPINNED_RESULT_SPOOLING_MEMORY + 1);\
   REMOVED_QUERY_OPT_FN(abort_on_default_limit_exceeded, ABORT_ON_DEFAULT_LIMIT_EXCEEDED)\
   QUERY_OPT_FN(abort_on_error, ABORT_ON_ERROR, TQueryOptionLevel::REGULAR)\
   REMOVED_QUERY_OPT_FN(allow_unsupported_formats, ALLOW_UNSUPPORTED_FORMATS)\
@@ -172,6 +172,10 @@ typedef std::unordered_map<string, beeswax::TQueryOptionLevel::type>
   QUERY_OPT_FN(default_hints_insert_statement, DEFAULT_HINTS_INSERT_STATEMENT,\
       TQueryOptionLevel::REGULAR)\
   QUERY_OPT_FN(spool_query_results, SPOOL_QUERY_RESULTS,\
+      TQueryOptionLevel::DEVELOPMENT)\
+  QUERY_OPT_FN(max_pinned_result_spooling_memory, MAX_PINNED_RESULT_SPOOLING_MEMORY,\
+      TQueryOptionLevel::DEVELOPMENT)\
+  QUERY_OPT_FN(max_unpinned_result_spooling_memory, MAX_UNPINNED_RESULT_SPOOLING_MEMORY,\
       TQueryOptionLevel::DEVELOPMENT)
   ;
 
@@ -207,6 +211,12 @@ void OverlayQueryOptions(const TQueryOptions& src, const QueryOptionsMask& mask,
 /// is set. An empty string value will reset the key to its default value.
 Status SetQueryOption(const std::string& key, const std::string& value,
     TQueryOptions* query_options, QueryOptionsMask* set_query_options_mask);
+
+/// Validates the query options after they have all been set. Returns a Status indicating
+/// the results of running the validation rules. The majority of the query options
+/// validation is done in SetQueryOption. However, more complex validations rules (e.g.
+/// validating that one config is greater than another config) are run here.
+Status ValidateQueryOptions(TQueryOptions* query_options);
 
 /// Parse a "," separated key=value pair of query options and set it in 'query_options'.
 /// If the same query option is specified more than once, the last one wins. The

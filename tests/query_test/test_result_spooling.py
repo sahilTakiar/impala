@@ -15,7 +15,12 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import re
+import time
+import threading
+
 from time import sleep
+from tests.common.errors import Timeout
 from tests.common.impala_test_suite import ImpalaTestSuite
 from tests.common.test_vector import ImpalaTestDimension
 from tests.util.cancel_util import cancel_query_and_validate_state
@@ -52,9 +57,102 @@ class TestResultSpooling(ImpalaTestSuite):
     self.validate_query("select id from functional.alltypes order by id limit 100",
         vector.get_value('exec_option'))
 
+  def test_spilling(self, vector):
+    """Tests that query results which don't fully fit into memory are spilled to disk.
+    The test runs a query asynchronously and wait for the PeakUnpinnedBytes counter in
+    the PLAN_ROOT_SINK section of the runtime profile to reach a non-zero value. Then
+    it fetches all the results and validates them."""
+    query = "select * from functional.alltypes order by id limit 1500"
+    exec_options = vector.get_value('exec_option')
+
+    # Set lower values for spill-to-disk configs to force the above query to spill
+    # spooled results.
+    exec_options['min_spillable_buffer_size'] = 8 * 1024
+    exec_options['default_spillable_buffer_size'] = 8 * 1024
+    exec_options['max_pinned_result_spooling_memory'] = 32 * 1024
+
+    # Execute the query without result spooling and save the results for later validation
+    base_result = self.execute_query(query, exec_options)
+    assert base_result.success, "Failed to run {0} when result spooling is disabled" \
+                                .format(query)
+
+    # Enable result spooling and run the query, fetch the runtime profile every 0.5
+    # seconds until either a timout of 10 seconds is hit, or PeakUnpinnedBytes shows
+    # up in the profile.
+    exec_options['spool_query_results'] = 'true'
+    # Amount of time to wait for the PeakUnpinnedBytes counter in the PLAN_ROOT_SINK
+    # section of the profile to reach a non-zero value.
+    timeout = 10
+    # Regex to look for in the runtime profiles. PeakUnpinnedBytes can show up in exec
+    # nodes as well, so we only look for the PeakUnpinnedBytes metrics in the
+    # PLAN_ROOT_SINK section of the profile.
+    unpinned_bytes_regex = "PLAN_ROOT_SINK[\s\S]*?PeakUnpinnedBytes.*\([1-9][0-9]*\)"
+
+    start_time = time.time()
+    handle = self.execute_query_async(query, exec_options)
+    try:
+      while re.search(unpinned_bytes_regex, self.client.get_runtime_profile(handle)) \
+          is None and time.time() - start_time < timeout:
+        time.sleep(0.5)
+      if re.search(unpinned_bytes_regex, self.client.get_runtime_profile(handle)) is None:
+        raise Timeout("Query {0} did not spill spooled results within the timeout {1}"
+                      .format(query, timeout))
+      result = self.client.fetch(query, handle)
+      assert result.data == base_result.data
+    finally:
+      self.client.close_query(handle)
+
+  def test_full_queue(self, vector):
+    """Tests that RowBatchSendWaitTime is updated properly for queries where Impala has
+    to block because too much data has been buffered, and the client hasn't fetched
+    any results."""
+    exec_options = vector.get_value('exec_option')
+
+    # Set lower values for spill-to-disk and result spooling configs so that the queue
+    # gets full when selecting a small number of rows.
+    exec_options['min_spillable_buffer_size'] = 8 * 1024
+    exec_options['default_spillable_buffer_size'] = 8 * 1024
+    exec_options['max_pinned_result_spooling_memory'] = 32 * 1024
+    exec_options['max_unpinned_result_spooling_memory'] = 32 * 1024
+    exec_options['spool_query_results'] = 'true'
+
+    # Regex to look for in the runtime profile.
+    send_wait_time_regex = "RowBatchSendWaitTime: [1-9]"
+    query = "select * from functional.alltypes order by id limit 1500"
+
+    # Execute the query asynchronously, wait a bit for the result spooling queue to fill
+    # up, and then start fetching results.
+    handle = self.execute_query_async(query, exec_options)
+    try:
+      self.wait_for_state(handle, self.client.QUERY_STATES['RUNNING'], 10)
+      time.sleep(5)
+      self.client.fetch(query, handle)
+      assert re.search(send_wait_time_regex, self.client.get_runtime_profile(handle)) \
+          is not None
+    finally:
+      self.client.close_query(handle)
+
+  def test_get_wait_time(self, vector):
+    """Tests that RowBatchGetWaitTime is updated properly for queries where the client
+    has to block because Impala has not produced rows quickly enough."""
+    query = "select id from functional.alltypes order by id limit 10"
+    vector.get_value('exec_option')['spool_query_results'] = 'true'
+    vector.get_value('exec_option')['debug_action'] = '2:GETNEXT:DELAY'
+    get_wait_time_regex = "RowBatchGetWaitTime: [1-9]"
+    handle = self.execute_query_async(query, vector.get_value('exec_option'))
+    try:
+      thread = threading.Thread(target=lambda:
+          self.create_impala_client().fetch(query, handle))
+      thread.start()
+      self.wait_for_state(handle, self.client.QUERY_STATES['FINISHED'], 10)
+      assert re.search(get_wait_time_regex, self.client.get_runtime_profile(handle)) \
+          is not None
+    finally:
+      self.client.close_query(handle)
+
   def validate_query(self, query, exec_options):
     """Compares the results of the given query with and without result spooling
-    enabled."""
+    enabled. Returns the runtime profile of the query executed with spooling enabled."""
     result = self.execute_query(query, exec_options)
     assert result.success, "Failed to run %s when result spooling is disabled" % query
     base_data = result.data
@@ -66,6 +164,7 @@ class TestResultSpooling(ImpalaTestSuite):
                                                "enabled" % query
     assert result.data == base_data, "%s returned different results when result " \
                                      "spooling was enabled" % query
+    return result.runtime_profile
 
 
 class TestResultSpoolingCancellation(ImpalaTestSuite):

@@ -50,6 +50,8 @@ class BlockingPlanRootSink : public PlanRootSink {
   BlockingPlanRootSink(
       TDataSinkId sink_id, const RowDescriptor* row_desc, RuntimeState* state);
 
+  virtual Status Prepare(RuntimeState* state, MemTracker* parent_mem_tracker) override;
+
   /// Blocks until the consumer has consumed 'batch' by calling GetNext().
   virtual Status Send(RuntimeState* state, RowBatch* batch) override;
 

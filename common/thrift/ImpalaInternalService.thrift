@@ -358,6 +358,12 @@ struct TQueryOptions {
 
   // See comment in ImpalaService.thrift
   86: optional bool spool_query_results = false;
+
+  // See comment in ImpalaService.thrift
+  87: optional i64 max_pinned_result_spooling_memory = 104857600;
+
+  // See comment in ImpalaService.thrift
+  88: optional i64 max_unpinned_result_spooling_memory = 1073741824;
 }
 
 // Impala currently has two types of sessions: Beeswax and HiveServer2

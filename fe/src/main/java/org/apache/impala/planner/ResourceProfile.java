@@ -32,11 +32,9 @@ public class ResourceProfile {
   // If the computed values are valid.
   private final boolean isValid_;
 
-  // Estimated memory consumption in bytes. Guaranteed to be >= minReservationBytes_ if
-  // both are set (the constructor ensures this).
-  // TODO: IMPALA-5013: currently we are inconsistent about how these estimates are
-  // derived or what they mean. Re-evaluate what they mean and either deprecate or
-  // fix them.
+  // Estimated memory consumption in bytes. Guaranteed to be >= minReservationBytes_ and
+  // <= maxMemReservationBytes_ if minMemReservationBytes_ is set or
+  // maxMemReservationBytes_, respectively (the constructor ensures this).
   private final long memEstimateBytes_;
 
   // Minimum memory reservation required to execute in bytes.
@@ -71,9 +69,12 @@ public class ResourceProfile {
     Preconditions.checkArgument(maxRowBufferBytes == -1
         || LongMath.isPowerOfTwo(maxRowBufferBytes));
     Preconditions.checkArgument(!isValid || threadReservation >= 0, threadReservation);
+    Preconditions.checkArgument(maxMemReservationBytes >= minMemReservationBytes);
     isValid_ = isValid;
-    memEstimateBytes_ = (minMemReservationBytes != -1) ?
+    memEstimateBytes = (minMemReservationBytes != -1) ?
         Math.max(memEstimateBytes, minMemReservationBytes) : memEstimateBytes;
+    memEstimateBytes_ = (minMemReservationBytes != -1) ?
+        Math.min(memEstimateBytes, maxMemReservationBytes) : memEstimateBytes;
     minMemReservationBytes_ = minMemReservationBytes;
     maxMemReservationBytes_ = maxMemReservationBytes;
     spillableBufferBytes_ = spillableBufferBytes;

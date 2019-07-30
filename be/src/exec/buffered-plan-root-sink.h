@@ -18,7 +18,7 @@
 #pragma once
 
 #include "exec/plan-root-sink.h"
-#include "runtime/deque-row-batch-queue.h"
+#include "runtime/spillable-row-batch-queue.h"
 #include "util/condition-variable.h"
 
 namespace impala {
@@ -39,7 +39,12 @@ namespace impala {
 class BufferedPlanRootSink : public PlanRootSink {
  public:
   BufferedPlanRootSink(TDataSinkId sink_id, const RowDescriptor* row_desc,
-      RuntimeState* state);
+      RuntimeState* state, const TBackendResourceProfile& resource_profile,
+      const TDebugOptions& debug_options);
+
+  virtual Status Prepare(RuntimeState* state, MemTracker* parent_mem_tracker) override;
+
+  virtual Status Open(RuntimeState* state) override;
 
   /// Creates a copy of the given RowBatch and adds it to the queue. The copy is
   /// necessary as the ownership of 'batch' remains with the sender.
@@ -79,8 +84,15 @@ class BufferedPlanRootSink : public PlanRootSink {
   /// to unblock the producer.
   ConditionVariable is_full_;
 
-  /// A DequeRowBatchQueue that buffers RowBatches from the sender for consumption by
+  /// A SpillableRowBatchQueue that buffers RowBatches from the sender for consumption by
   /// the consumer. The queue is not thread safe and access is protected by 'lock_'.
-  std::unique_ptr<DequeRowBatchQueue> batch_queue_;
+  std::unique_ptr<SpillableRowBatchQueue> batch_queue_;
+
+  const TBackendResourceProfile& resource_profile_;
+
+  const TDebugOptions& debug_options_;
+
+  RuntimeProfile::Counter* row_batches_send_wait_timer_ = nullptr;
+  RuntimeProfile::Counter* row_batches_get_wait_timer_ = nullptr;
 };
 }

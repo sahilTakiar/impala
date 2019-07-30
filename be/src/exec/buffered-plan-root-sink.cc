@@ -22,15 +22,28 @@
 
 namespace impala {
 
-// The maximum number of row batches to queue before calls to Send() start to block.
-// After this many row batches have been added, Send() will block until GetNext() reads
-// RowBatches from the queue.
-const uint32_t MAX_QUEUED_ROW_BATCHES = 10;
-
-BufferedPlanRootSink::BufferedPlanRootSink(
-    TDataSinkId sink_id, const RowDescriptor* row_desc, RuntimeState* state)
+BufferedPlanRootSink::BufferedPlanRootSink(TDataSinkId sink_id,
+    const RowDescriptor* row_desc, RuntimeState* state,
+    const TBackendResourceProfile& resource_profile, const TDebugOptions& debug_options)
   : PlanRootSink(sink_id, row_desc, state),
-    batch_queue_(new DequeRowBatchQueue(MAX_QUEUED_ROW_BATCHES)) {}
+    resource_profile_(resource_profile),
+    debug_options_(debug_options) {}
+
+Status BufferedPlanRootSink::Prepare(RuntimeState* state, MemTracker* parent_mem_tracker) {
+  RETURN_IF_ERROR(DataSink::Prepare(state, parent_mem_tracker));
+  row_batches_send_wait_timer_ = ADD_TIMER(profile(), "RowBatchSendWaitTime");
+  row_batches_get_wait_timer_ = ADD_TIMER(profile(), "RowBatchGetWaitTime");
+  return Status::OK();
+}
+
+Status BufferedPlanRootSink::Open(RuntimeState* state) {
+  RETURN_IF_ERROR(DataSink::Open(state));
+  batch_queue_.reset(new SpillableRowBatchQueue(name_,
+      state->query_options().max_unpinned_result_spooling_memory, state, mem_tracker(),
+      profile(), row_desc_, resource_profile_, debug_options_));
+  RETURN_IF_ERROR(batch_queue_->Open());
+  return Status::OK();
+}
 
 Status BufferedPlanRootSink::Send(RuntimeState* state, RowBatch* batch) {
   SCOPED_TIMER(profile()->total_time_counter());
@@ -46,11 +59,6 @@ Status BufferedPlanRootSink::Send(RuntimeState* state, RowBatch* batch) {
   PlanRootSink::ValidateCollectionSlots(*row_desc_, batch);
   RETURN_IF_ERROR(PlanRootSink::CheckRowsProducedLimit(state, batch));
 
-  // Make a copy of the given RowBatch and place it on the queue.
-  unique_ptr<RowBatch> output_batch =
-      make_unique<RowBatch>(batch->row_desc(), batch->capacity(), mem_tracker());
-  batch->DeepCopyTo(output_batch.get());
-
   {
     // Add the copied batch to the RowBatch queue and wake up the consumer thread if it is
     // waiting for rows to process.
@@ -58,17 +66,14 @@ Status BufferedPlanRootSink::Send(RuntimeState* state, RowBatch* batch) {
 
     // If the queue is full, wait for the producer thread to read batches from it.
     while (!state->is_cancelled() && batch_queue_->IsFull()) {
+      SCOPED_TIMER(profile()->inactive_timer());
+      SCOPED_TIMER(row_batches_send_wait_timer_);
       is_full_.Wait(l);
     }
     RETURN_IF_CANCELLED(state);
 
     // Add the batch to the queue and then notify the consumer that rows are available.
-    if (!batch_queue_->AddBatch(move(output_batch))) {
-      // Adding a batch should always be successful because the queue should always be
-      // open when Send is called, and the call to is_full_.Wait(l) ensures spaces is
-      // available.
-      DCHECK(false) << "DequeueRowBatchQueue::AddBatch should never return false";
-    }
+    RETURN_IF_ERROR(batch_queue_->AddBatch(batch));
   }
   // Release the lock before calling notify so the consumer thread can immediately acquire
   // the lock.
@@ -85,7 +90,10 @@ Status BufferedPlanRootSink::FlushFinal(RuntimeState* state) {
   // SenderState and return appropriately.
   rows_available_.NotifyAll();
   // Wait until the consumer has read all rows from the batch_queue_.
-  consumer_eos_.Wait(l);
+  {
+    SCOPED_TIMER(profile()->inactive_timer());
+    consumer_eos_.Wait(l);
+  }
   RETURN_IF_CANCELLED(state);
   return Status::OK();
 }
@@ -98,7 +106,7 @@ void BufferedPlanRootSink::Close(RuntimeState* state) {
   if (sender_state_ == SenderState::ROWS_PENDING) {
     sender_state_ = SenderState::CLOSED_NOT_EOS;
   }
-  batch_queue_->Close();
+  if (batch_queue_ != nullptr) batch_queue_->Close();
   rows_available_.NotifyAll();
   DataSink::Close(state);
 }
@@ -117,6 +125,7 @@ Status BufferedPlanRootSink::GetNext(
     unique_lock<mutex> l(lock_);
     while (batch_queue_->IsEmpty() && sender_state_ == SenderState::ROWS_PENDING
         && !state->is_cancelled()) {
+      SCOPED_TIMER(row_batches_get_wait_timer_);
       rows_available_.Wait(l);
     }
 
@@ -125,7 +134,8 @@ Status BufferedPlanRootSink::GetNext(
     // return. The queue could be empty if the sink was closed while waiting for rows to
     // become available, or if the sink was closed before the current call to GetNext.
     if (!state->is_cancelled() && !batch_queue_->IsEmpty()) {
-      unique_ptr<RowBatch> batch = batch_queue_->GetBatch();
+      unique_ptr<RowBatch> batch = make_unique<RowBatch>(row_desc_, state->batch_size(), mem_tracker());
+      RETURN_IF_ERROR(batch_queue_->GetBatch(batch.get()));
       // TODO for now, if num_results < batch->num_rows(), we terminate returning results
       // early until we can properly handle fetch requests where
       // num_results < batch->num_rows().
@@ -133,10 +143,13 @@ Status BufferedPlanRootSink::GetNext(
         *eos = true;
         is_full_.NotifyOne();
         consumer_eos_.NotifyOne();
+        batch->Reset();
         return state->GetQueryStatus();
       }
       RETURN_IF_ERROR(
           results->AddRows(output_expr_evals_, batch.get(), 0, batch->num_rows()));
+      // Prevent expr result allocations from accumulating.
+      expr_results_pool_->Clear();
       batch->Reset();
     }
     *eos = batch_queue_->IsEmpty() && sender_state_ == SenderState::EOS;
@@ -149,8 +162,7 @@ Status BufferedPlanRootSink::GetNext(
   // FlushFinal was called or the query was cancelled. If FlushFinal was called then the
   // consumer thread has completed. If the query is cancelled, then we wake up the
   // consumer thread so it can check the cancellation status and return. Releasing the
-  // lock is safe because the consumer always loops until the queue is actually has
-  // space.
+  // lock is safe because the consumer always loops until the queue actually has space.
   is_full_.NotifyOne();
   return state->GetQueryStatus();
 }

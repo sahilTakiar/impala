@@ -57,6 +57,8 @@ class PlanRootSink : public DataSink {
   PlanRootSink(TDataSinkId sink_id, const RowDescriptor* row_desc, RuntimeState* state);
   virtual ~PlanRootSink();
 
+  virtual Status Prepare(RuntimeState* state, MemTracker* parent_mem_tracker) override = 0;
+
   /// Sends a new batch. Ownership of 'batch' remains with the sender.
   virtual Status Send(RuntimeState* state, RowBatch* batch) override = 0;
 
