@@ -66,7 +66,9 @@ class BufferedPlanRootSink : public PlanRootSink {
   /// Releases resources and unblocks the consumer thread.
   virtual void Close(RuntimeState* state) override;
 
-  /// Blocks until rows are available for consumption.
+  /// Blocks until rows are available for consumption. GetNext() always returns 'num_rows'
+  /// rows unless (1) there are not enough rows left in the result set to return
+  /// 'num_rows' rows, or (2) the value of 'num_rows' exceeds MAX_FETCH_SIZE.
   virtual Status GetNext(
       RuntimeState* state, QueryResultSet* result_set, int num_rows, bool* eos) override;
 
@@ -75,6 +77,13 @@ class BufferedPlanRootSink : public PlanRootSink {
   virtual void Cancel(RuntimeState* state) override;
 
  private:
+  // The maximum number of rows that can be fetched at a time. Set to 100x the default
+  // BATCH_SIZE. Limiting the fetch size is necessary so that the resulting QueryResultSet
+  // does not take up too much memory. Memory used by a QueryResultSet is not tracked or
+  // reserved, so creating QueryResultSets that are too big can throw off admission
+  // control.
+  static const int MAX_FETCH_SIZE = 1024 * 100;
+
   /// Protects the RowBatchQueue and all ConditionVariables.
   boost::mutex lock_;
 
@@ -119,5 +128,17 @@ class BufferedPlanRootSink : public PlanRootSink {
   /// them. Specifically, this counter measures the amount of time spent waiting on
   /// 'rows_available_' in the 'GetNext' method.
   RuntimeProfile::Counter* row_batches_get_wait_timer_ = nullptr;
+
+  /// The RowBatch currently being read by 'GetNext'. Necessary for calls to 'GetNext'
+  /// that only read part of a RowBatch from the queue. If nullptr, 'GetNext' will read
+  /// the next RowBatch from the queue. The pointer is reset whenever 'GetNext' has
+  /// finished reading all rows from the batch.
+  std::unique_ptr<RowBatch> current_batch_ = nullptr;
+
+  /// The index of the next row to be read from 'current_batch_' in the next call to
+  /// 'GetNext'. If 'current_batch_' is nullptr, the value of 'current_batch_row_' is 0.
+  int current_batch_row_ = 0;
+
+  bool IsQueueEmpty() { return batch_queue_->IsEmpty() && current_batch_ == nullptr; }
 };
 }
