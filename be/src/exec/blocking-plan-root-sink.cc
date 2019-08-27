@@ -114,11 +114,21 @@ Status BlockingPlanRootSink::GetNext(
   num_rows_requested_ = num_results;
   sender_cv_.NotifyAll();
 
+  // True if the consumer timed out waiting for the producer to send rows, false otherwise.
+  bool timed_out = false;
+
   // Wait while the sender is still producing rows and hasn't filled in the current
   // result set.
   while (sender_state_ == SenderState::ROWS_PENDING && results_ != nullptr
-      && !state->is_cancelled()) {
-    consumer_cv_.Wait(l);
+      && !state->is_cancelled() && !timed_out) {
+    if (!consumer_cv_.WaitFor(l, PlanRootSink::fetch_rows_timeout_us())) {
+      timed_out = true;
+
+      // If the consumer timed out, make sure results_ is set to nullptr because the
+      // consumer will destroy the current QueryResultSet and create a new one for the
+      // next fetch request.
+      results_ = nullptr;
+    }
   }
 
   *eos = sender_state_ == SenderState::EOS;

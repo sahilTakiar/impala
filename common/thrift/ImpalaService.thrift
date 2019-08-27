@@ -448,6 +448,13 @@ enum TImpalaQueryOptions {
   // SPOOL_QUERY_RESULTS is true. Setting this to 0 or -1 means the memory is unbounded.
   // Cannot be set to values below -1.
   MAX_SPILLED_RESULT_SPOOLING_MEM = 91
+
+  // The maximum amount of time, in milliseconds, a fetch rows request (TFetchResultsReq)
+  // from the client should spend waiting for results to become available. When result
+  // spooling is enabled, a fetch request to may read multiple RowBatches, in which case,
+  // the timeout controls how long the client waits for each returned RowBatch to be
+  // produced. Defaults to 1000 milliseconds.
+  FETCH_ROWS_TIMEOUT_MS = 92
 }
 
 // The summary of a DML statement.

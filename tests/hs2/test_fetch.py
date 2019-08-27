@@ -18,10 +18,15 @@
 
 import pytest
 import re
+
+from time import sleep
+from time import time
+from tests.common.errors import Timeout
 from tests.hs2.hs2_test_suite import (HS2TestSuite, needs_session,
     create_op_handle_without_secret)
 from TCLIService import TCLIService, constants
 from TCLIService.ttypes import TTypeId
+
 
 # Simple test to make sure all the HS2 types are supported for both the row and
 # column-oriented versions of the HS2 protocol.
@@ -291,3 +296,47 @@ class TestFetch(HS2TestSuite):
         TCLIService.TGetResultSetMetadataReq(operationHandle=good_handle)))
     HS2TestSuite.check_response(self.hs2_client.CloseOperation(
         TCLIService.TCloseOperationReq(operationHandle=good_handle)))
+
+  @needs_session()
+  def test_fetch_timeout(self):
+    """Test FETCH_ROWS_TIMEOUT_MS with default configs."""
+    self.__test_fetch_timeout()
+
+  @needs_session(conf_overlay={'spool_query_results': 'true'})
+  def test_fetch_result_spooling_timeout(self):
+    """Test FETCH_ROWS_TIMEOUT_MS with result spooling enabled."""
+    self.__test_fetch_timeout()
+
+  def __test_fetch_timeout(self):
+    """Test the query option FETCH_ROWS_TIMEOUT_MS by running a query with a DELAY
+    DEBUG_ACTION and a low value for the fetch timeout. Validates that when the timeout
+    is hit, 0 rows are returned."""
+    num_rows = 1
+    statement = "select id from functional.alltypes limit {0}".format(num_rows)
+    execute_statement_resp = self.execute_statement(statement,
+        conf_overlay={'debug_action': '0:GETNEXT:DELAY', 'fetch_rows_timeout_ms': '1'})
+    HS2TestSuite.check_response(execute_statement_resp)
+
+    # Assert that the first fetch request returns 0 rows.
+    fetch_results_resp = self.hs2_client.FetchResults(TCLIService.TFetchResultsReq(
+        operationHandle=execute_statement_resp.operationHandle, maxRows=1024))
+    HS2TestSuite.check_response(fetch_results_resp)
+    assert self.get_num_rows(fetch_results_resp.results) == 0
+    assert fetch_results_resp.hasMoreRows
+
+    # The timeout to wait for fetch requests to fetch all rows.
+    timeout = 10
+
+    start_time = time()
+    num_fetched = 0
+
+    # Fetch results until either the timeout is hit or all rows have been fetched.
+    while num_fetched != num_rows and time() - start_time < timeout:
+      sleep(0.5)
+      fetch_results_resp = self.hs2_client.FetchResults(TCLIService.TFetchResultsReq(
+          operationHandle=execute_statement_resp.operationHandle, maxRows=1024))
+      HS2TestSuite.check_response(fetch_results_resp)
+      num_fetched += self.get_num_rows(fetch_results_resp.results)
+    if num_fetched != num_rows:
+      raise Timeout("Query {0} did not fetch all results within the timeout {1}"
+                    .format(statement, timeout))

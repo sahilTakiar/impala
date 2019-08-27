@@ -152,13 +152,22 @@ Status BufferedPlanRootSink::GetNext(
     int num_rows_to_read =
         num_results <= 0 ? FETCH_NUM_BATCHES * state->batch_size() : num_results;
 
+    // True if the consumer timed out waiting for the producer to send rows, false otherwise.
+    bool timed_out = false;
+
     // Read from the queue until all requested rows have been read, or eos is hit.
-    while (!*eos && num_rows_read < num_rows_to_read) {
+    while (!*eos && num_rows_read < num_rows_to_read && !timed_out) {
       // Wait for the queue to have rows in it.
       while (IsQueueEmpty() && sender_state_ == SenderState::ROWS_PENDING
-          && !state->is_cancelled()) {
+          && !state->is_cancelled() && !timed_out) {
         SCOPED_TIMER(row_batches_get_wait_timer_);
-        rows_available_.Wait(l);
+        // Wait fetch_rows_timeout_us_ for rows to become available before returning to
+        // the client. Since the consumer can consume multiple batches in one fetch,
+        // worst case, the client will wait
+        // fetch_rows_timeout_us_ * MAX_FETCH_SIZE / BATCH_SIZE before returning.
+        if (!rows_available_.WaitFor(l, PlanRootSink::fetch_rows_timeout_us())) {
+          timed_out = true;
+        }
       }
 
       // If the query was cancelled while the sink was waiting for rows to become
