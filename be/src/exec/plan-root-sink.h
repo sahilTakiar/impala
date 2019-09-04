@@ -106,6 +106,14 @@ class PlanRootSink : public DataSink {
   enum class SenderState { ROWS_PENDING, EOS, CLOSED_NOT_EOS };
   SenderState sender_state_ = SenderState::ROWS_PENDING;
 
+  /// The number of rows sent to this PlanRootSink via Send(). Initialized in
+  /// Prepare().
+  RuntimeProfile::Counter* rows_sent_counter_ = nullptr;
+
+  /// The rate at which rows are sent to this PlanRootSink via Send(). Initialized in
+  /// Prepare().
+  RuntimeProfile::Counter* rows_sent_rate_ = nullptr;
+
  private:
   /// Limit on the number of rows produced by this query, initialized by the constructor.
   const int64_t num_rows_produced_limit_;
