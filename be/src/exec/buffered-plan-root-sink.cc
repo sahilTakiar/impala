@@ -148,11 +148,12 @@ Status BufferedPlanRootSink::GetNext(
     // Track the number of rows read from the queue and the number of rows to read.
     int num_rows_read = 0;
     // If 'num_results' <= 0 then by default fetch FETCH_NUM_BATCHES batches.
-    int num_rows_to_read =
+    const int num_rows_to_read =
         num_results <= 0 ? FETCH_NUM_BATCHES * state->batch_size() : num_results;
 
-    // Read from the queue until all requested rows have been read, or eos is hit.
-    while (!*eos && num_rows_read < num_rows_to_read) {
+    // Read from the queue until all requested rows have been read, eos is hit, or the
+    // query is cancelled.
+    while (!*eos && num_rows_read < num_rows_to_read && !state->is_cancelled()) {
       // Wait for the queue to have rows in it.
       while (IsQueueClosedOrEmpty() && sender_state_ == SenderState::ROWS_PENDING
           && !state->is_cancelled()) {
@@ -200,8 +201,11 @@ Status BufferedPlanRootSink::GetNext(
         // Prevent expr result allocations from accumulating.
         expr_results_pool_->Clear();
       }
-      *eos = IsQueueClosedOrEmpty() && sender_state_ == SenderState::EOS;
+      // If we have read all rows, then break out of the while loop.
+      *eos = IsGetNextEos();
     }
+    // If the query was cancelled while reading rows, update eos and return.
+    *eos = IsGetNextEos();
     if (*eos) consumer_eos_.NotifyOne();
   }
   return state->GetQueryStatus();

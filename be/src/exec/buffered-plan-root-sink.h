@@ -149,5 +149,11 @@ class BufferedPlanRootSink : public PlanRootSink {
     return !batch_queue_->IsOpen()
         || (batch_queue_->IsEmpty() && current_batch_row_ == 0);
   }
+
+  /// Sets the value of eos inside GetNext. eos is set to true if the queue is closed /
+  /// empty and the producer has set sender_state_ to EOS.
+  bool IsGetNextEos() const {
+    return IsQueueClosedOrEmpty() && sender_state_ == SenderState::EOS;
+  }
 };
 }
