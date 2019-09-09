@@ -45,8 +45,7 @@ Status BufferedPlanRootSink::Prepare(
 
 Status BufferedPlanRootSink::Open(RuntimeState* state) {
   RETURN_IF_ERROR(DataSink::Open(state));
-  current_batch_ =
-      make_unique<RowBatch>(row_desc_, state->batch_size(), mem_tracker());
+  current_batch_ = make_unique<RowBatch>(row_desc_, state->batch_size(), mem_tracker());
   batch_queue_.reset(new SpillableRowBatchQueue(name_,
       state->query_options().max_spilled_result_spooling_mem, state, mem_tracker(),
       profile(), row_desc_, resource_profile_, debug_options_));
@@ -155,7 +154,7 @@ Status BufferedPlanRootSink::GetNext(
     // Read from the queue until all requested rows have been read, or eos is hit.
     while (!*eos && num_rows_read < num_rows_to_read) {
       // Wait for the queue to have rows in it.
-      while (IsQueueEmpty() && sender_state_ == SenderState::ROWS_PENDING
+      while (IsQueueClosedOrEmpty() && sender_state_ == SenderState::ROWS_PENDING
           && !state->is_cancelled()) {
         SCOPED_TIMER(row_batches_get_wait_timer_);
         rows_available_.Wait(l);
@@ -166,7 +165,7 @@ Status BufferedPlanRootSink::GetNext(
       // eos and then return. The queue could be empty if the sink was closed while
       // waiting for rows to become available, or if the sink was closed before the
       // current call to GetNext.
-      if (!state->is_cancelled() && !IsQueueEmpty()) {
+      if (!state->is_cancelled() && !IsQueueClosedOrEmpty()) {
         // If current_batch_ is empty, then read directly from the queue.
         if (current_batch_row_ == 0) {
           RETURN_IF_ERROR(batch_queue_->GetBatch(current_batch_.get()));
@@ -201,7 +200,7 @@ Status BufferedPlanRootSink::GetNext(
         // Prevent expr result allocations from accumulating.
         expr_results_pool_->Clear();
       }
-      *eos = IsQueueEmpty() && sender_state_ == SenderState::EOS;
+      *eos = IsQueueClosedOrEmpty() && sender_state_ == SenderState::EOS;
     }
     if (*eos) consumer_eos_.NotifyOne();
   }

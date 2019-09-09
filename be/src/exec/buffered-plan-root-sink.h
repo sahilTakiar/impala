@@ -140,11 +140,14 @@ class BufferedPlanRootSink : public PlanRootSink {
   /// 'GetNext'. If 'current_batch_' is nullptr, the value of 'current_batch_row_' is 0.
   int current_batch_row_ = 0;
 
-  /// Returns true if the 'queue' is empty (not the 'batch_queue_'). 'queue' refers to
-  /// the logical queue of RowBatches and thus includes any RowBatch that
+  /// Returns true if the 'queue' (not the 'batch_queue_') is closed or empty. 'queue'
+  /// refers to the logical queue of RowBatches and thus includes any RowBatch that
   /// 'current_batch_' points to. Must be called while holding 'lock_'.
-  bool IsQueueEmpty() const {
-    return batch_queue_->IsEmpty() && current_batch_row_ == 0;
+  bool IsQueueClosedOrEmpty() const {
+    // Make sure to check if the queue is open before calling IsEmpty(), otherwise
+    // IsEmpty() will DCHECK.
+    return !batch_queue_->IsOpen()
+        || (batch_queue_->IsEmpty() && current_batch_row_ == 0);
   }
 };
 }
