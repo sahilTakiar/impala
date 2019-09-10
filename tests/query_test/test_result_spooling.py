@@ -21,7 +21,8 @@ import threading
 
 from time import sleep
 from tests.common.errors import Timeout
-from tests.common.impala_test_suite import ImpalaTestSuite
+from tests.beeswax.impala_beeswax import ImpalaBeeswaxException
+from tests.common.impala_test_suite import ImpalaTestSuite, LOG
 from tests.common.test_dimensions import create_exec_option_dimension
 from tests.common.test_vector import ImpalaTestDimension
 from tests.util.cancel_util import cancel_query_and_validate_state
@@ -344,3 +345,27 @@ class TestResultSpoolingCancellation(ImpalaTestSuite):
           "Unexpected status code from cancel request: {0}".format(cancel_result)
     finally:
       if handle: self.client.close_query(handle)
+
+
+class TestFailpoints(ImpalaTestSuite):
+
+  _debug_actions = ['5:GETNEXT:MEM_LIMIT_EXCEEDED|0:GETNEXT:DELAY', 'BPRS_BEFORE_OPEN:FAIL', 
+            'BPRS_BEFORE_ADD_BATCH:FAIL@1.0', 'BPRS_BEFORE_FLUSH_FINAL:FAIL',
+            'BPRS_BEFORE_GET_BATCH:FAIL@1.0']
+  @classmethod
+  def get_workload(cls):
+    return 'functional-query'
+
+  def test_failpoints(self, vector):
+    # this reproduce the error, but not really sure why it works but it does so just stick with it
+    vector.get_value('exec_option')['batch_size'] = 10
+    query = "select 1 from functional.alltypessmall a join functional.alltypessmall b on a.id = b.id"
+    vector.get_value('exec_option')['debug_action'] = '5:GETNEXT:MEM_LIMIT_EXCEEDED|0:GETNEXT:DELAY'
+    vector.get_value('exec_option')['spool_query_results'] = 'true'
+    try:
+      result = self.execute_query(query, vector.get_value('exec_option'))
+      assert 'Expected Failure'
+    except ImpalaBeeswaxException as e:
+      LOG.debug(e)
+    del vector.get_value('exec_option')['debug_action']
+    self.execute_query(query, vector.get_value('exec_option'))

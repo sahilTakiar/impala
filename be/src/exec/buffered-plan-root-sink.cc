@@ -44,6 +44,7 @@ Status BufferedPlanRootSink::Prepare(
 }
 
 Status BufferedPlanRootSink::Open(RuntimeState* state) {
+  RETURN_IF_ERROR(DebugAction(state->query_options(), "BPRS_BEFORE_OPEN"));
   RETURN_IF_ERROR(DataSink::Open(state));
   current_batch_ = make_unique<RowBatch>(row_desc_, state->batch_size(), mem_tracker());
   batch_queue_.reset(new SpillableRowBatchQueue(name_,
@@ -78,6 +79,9 @@ Status BufferedPlanRootSink::Send(RuntimeState* state, RowBatch* batch) {
     }
     RETURN_IF_CANCELLED(state);
 
+    // Debug action before AddBatch is called.
+    RETURN_IF_ERROR(DebugAction(state->query_options(), "BPRS_BEFORE_ADD_BATCH"));
+
     // Add the batch to the queue and then notify the consumer that rows are available.
     RETURN_IF_ERROR(batch_queue_->AddBatch(batch));
   }
@@ -89,6 +93,10 @@ Status BufferedPlanRootSink::Send(RuntimeState* state, RowBatch* batch) {
 
 Status BufferedPlanRootSink::FlushFinal(RuntimeState* state) {
   SCOPED_TIMER(profile()->total_time_counter());
+ 
+  // Debug action before FlushFinal is called.
+  RETURN_IF_ERROR(DebugAction(state->query_options(), "BPRS_BEFORE_FLUSH_FINAL"));
+  
   DCHECK(!closed_);
   unique_lock<mutex> l(lock_);
   sender_state_ = SenderState::EOS;
@@ -169,6 +177,8 @@ Status BufferedPlanRootSink::GetNext(
       if (!state->is_cancelled() && !IsQueueClosedOrEmpty()) {
         // If current_batch_ is empty, then read directly from the queue.
         if (current_batch_row_ == 0) {
+          // Debug action before GetBatch is called.
+          RETURN_IF_ERROR(DebugAction(state->query_options(), "BPRS_BEFORE_GET_BATCH"));
           RETURN_IF_ERROR(batch_queue_->GetBatch(current_batch_.get()));
 
           // After reading a RowBatch from the queue, it now has additional capacity,
