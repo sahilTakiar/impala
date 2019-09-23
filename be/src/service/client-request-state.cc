@@ -87,9 +87,9 @@ static const string TABLES_MISSING_STATS_KEY = "Tables Missing Stats";
 static const string TABLES_WITH_CORRUPT_STATS_KEY = "Tables With Corrupt Table Stats";
 static const string TABLES_WITH_MISSING_DISK_IDS_KEY = "Tables With Missing Disk Ids";
 
-ClientRequestState::ClientRequestState(
-    const TQueryCtx& query_ctx, ExecEnv* exec_env, Frontend* frontend,
-    ImpalaServer* server, shared_ptr<ImpalaServer::SessionState> session)
+ClientRequestState::ClientRequestState(const TQueryCtx& query_ctx, ExecEnv* exec_env,
+    Frontend* frontend, ImpalaServer* server,
+    shared_ptr<ImpalaServer::SessionState> session)
   : query_ctx_(query_ctx),
     last_active_time_ms_(numeric_limits<int64_t>::max()),
     child_query_executor_(new ChildQueryExecutor),
@@ -103,7 +103,8 @@ ClientRequestState::ClientRequestState(
     summary_profile_(RuntimeProfile::Create(&profile_pool_, "Summary")),
     frontend_(frontend),
     parent_server_(server),
-    start_time_us_(UnixMicros()) {
+    start_time_us_(UnixMicros()),
+    fetch_rows_timeout_us_(MICROS_PER_MILLI * query_options().fetch_rows_timeout_ms) {
 #ifndef NDEBUG
   profile_->AddInfoString("DEBUG MODE WARNING", "Query profile created while running a "
       "DEBUG build of Impala. Use RELEASE builds to measure query performance.");
@@ -721,7 +722,7 @@ void ClientRequestState::Done() {
   MarkActive();
   // Make sure we join on wait_thread_ before we finish (and especially before this object
   // is destroyed).
-  BlockOnWait();
+  BlockOnWait(-1);
 
   // Update latest observed Kudu timestamp stored in the session from the coordinator.
   // Needs to take the session_ lock which must not be taken while holding lock_, so this
@@ -782,12 +783,26 @@ Status ClientRequestState::WaitAsync() {
       &ClientRequestState::Wait, this, &wait_thread_, false);
 }
 
-void ClientRequestState::BlockOnWait() {
+bool ClientRequestState::BlockOnWait(int64_t timeout_us) {
   unique_lock<mutex> l(lock_);
   // Some metadata operations like GET_COLUMNS do not rely on WaitAsync() to launch
   // the wait thread. In such cases this method is expected to be a no-op.
-  if (wait_thread_.get() == nullptr) return;
-  while (!is_wait_done_) block_on_wait_cv_.Wait(l);
+  if (wait_thread_.get() == nullptr) return true;
+  while (!is_wait_done_) {
+    if (timeout_us > 0) {
+      MonotonicStopWatch wait_timeout_timer;
+      wait_timeout_timer.Start();
+      bool notified = block_on_wait_cv_.WaitFor(l, timeout_us);
+      if (notified) {
+        block_on_wait_time_us_ = wait_timeout_timer.ElapsedTime() / NANOS_PER_MICRO;
+      }
+      return notified;
+    } else {
+      block_on_wait_cv_.Wait(l);
+      return true;
+    }
+  }
+  return true;
 }
 
 void ClientRequestState::Wait() {

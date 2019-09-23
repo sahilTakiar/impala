@@ -186,7 +186,12 @@ Status ImpalaServer::FetchInternal(ClientRequestState* request_state,
   // ensures that rows are ready to be fetched (e.g., Wait() opens
   // ClientRequestState::output_exprs_, which are evaluated in
   // ClientRequestState::FetchRows() below).
-  request_state->BlockOnWait();
+  if (!request_state->BlockOnWait(request_state->fetch_rows_timeout_us())) {
+    fetch_results->status.__set_statusCode(TStatusCode::STILL_EXECUTING_STATUS);
+    fetch_results->__set_hasMoreRows(true);
+    fetch_results->__isset.results = false;
+    return Status::OK();
+  }
 
   lock_guard<mutex> frl(*request_state->fetch_rows_lock());
   lock_guard<mutex> l(*request_state->lock());
@@ -853,7 +858,6 @@ void ImpalaServer::FetchResults(TFetchResultsResp& return_val,
     }
     HS2_RETURN_ERROR(return_val, status.GetDetail(), SQLSTATE_GENERAL_ERROR);
   }
-  return_val.status.__set_statusCode(thrift::TStatusCode::SUCCESS_STATUS);
 }
 
 void ImpalaServer::GetLog(TGetLogResp& return_val, const TGetLogReq& request) {

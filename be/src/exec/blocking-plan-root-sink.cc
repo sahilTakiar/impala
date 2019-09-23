@@ -105,10 +105,11 @@ void BlockingPlanRootSink::Cancel(RuntimeState* state) {
   consumer_cv_.NotifyAll();
 }
 
-Status BlockingPlanRootSink::GetNext(
-    RuntimeState* state, QueryResultSet* results, int num_results, bool* eos) {
+Status BlockingPlanRootSink::GetNext(RuntimeState* state, QueryResultSet* results,
+    int num_results, bool* eos, uint64_t timeout_us) {
   // Used to track how long the consumer waits for RowBatches to be produced and
   // materialized.
+  DCHECK_GE(timeout_us, 0);
   MonotonicStopWatch wait_timeout_timer;
   wait_timeout_timer.Start();
 
@@ -134,9 +135,10 @@ Status BlockingPlanRootSink::GetNext(
     // does not affect correctness because the producer always sets 'results_' to nullptr
     // if it appends any rows to the QueryResultSet and it always appends either an entire
     // RowBatch, or as many rows as requested.
-    uint64_t wait_duration = max(static_cast<uint64_t>(1),
-        PlanRootSink::fetch_rows_timeout_us() - wait_timeout_timer.ElapsedTime());
-    if (!consumer_cv_.WaitFor(l, wait_duration)) {
+    uint64_t wait_duration_us = max(static_cast<uint64_t>(1),
+        timeout_us - static_cast<uint64_t>(
+                         round(wait_timeout_timer.ElapsedTime() / NANOS_PER_MICRO)));
+    if (!consumer_cv_.WaitFor(l, wait_duration_us)) {
       timed_out = true;
 
       // If the consumer timed out, make sure results_ is set to nullptr because the

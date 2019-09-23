@@ -105,8 +105,10 @@ class ClientRequestState {
   /// for the asynchronous thread (wait_thread_) to signal block_on_wait_cv_. It is
   /// thread-safe and all the caller threads will block until wait_thread_ has
   /// completed) and multiple times (non-blocking once wait_thread_ has completed).
-  /// Do not call while holding lock_.
-  void BlockOnWait();
+  /// Do not call while holding lock_. 'timeout' is the amount of time (in microseconds
+  /// that the thread waits for WaitAsync() to complete before returning. If WaitAsync()
+  /// completed within the timeout, this method returns true, false otherwise.
+  bool BlockOnWait(int64_t timeout_us);
 
   /// Return at most max_rows from the current batch. If the entire current batch has
   /// been returned, fetch another batch first.
@@ -277,6 +279,10 @@ class ClientRequestState {
   const TDdlExecResponse* ddl_exec_response() const {
     return catalog_op_executor_->ddl_exec_response();
   }
+
+  /// Returns the FETCH_ROWS_TIMEOUT_MS value for this query (converted to microseconds).
+  uint64_t fetch_rows_timeout_us() const { return fetch_rows_timeout_us_; }
+
 protected:
   /// Updates the end_time_us_ of this query if it isn't set. The end time is determined
   /// when this function is called for the first time, calling it multiple times does not
@@ -341,6 +347,9 @@ protected:
   /// Condition variable used to signal the threads that are blocked on Wait() to finish.
   /// Callers are expected to use BlockOnWait() for Wait() to finish.
   ConditionVariable block_on_wait_cv_;
+
+  /// Amount of time the client spent (in microseconds) waiting in BlockOnWait().
+  uint64_t block_on_wait_time_us_ = 0;
 
   /// Wait condition used in conjunction with block_on_wait_cv_.
   bool is_wait_done_ = false;
@@ -481,6 +490,10 @@ protected:
   /// yet done. It is assinged the final value in ClientRequestState::Done() or when the
   /// coordinator relases its admission control resources.
   AtomicInt64 end_time_us_{0};
+
+  /// Timeout, in microseconds, when waiting for rows to become available. Derived from
+  /// the query option FETCH_ROWS_TIMEOUT_MS.
+  const uint64_t fetch_rows_timeout_us_;
 
   /// Executes a local catalog operation (an operation that does not need to execute
   /// against the catalog service). Includes USE, SHOW, DESCRIBE, and EXPLAIN statements.

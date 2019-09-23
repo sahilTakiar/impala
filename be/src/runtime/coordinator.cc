@@ -680,7 +680,16 @@ Status Coordinator::GetNext(QueryResultSet* results, int max_rows, bool* eos) {
   DCHECK(coord_sink_ != nullptr)     << "Exec() should be called first";
   RuntimeState* runtime_state = coord_instance_->runtime_state();
 
-  Status status = coord_sink_->GetNext(runtime_state, results, max_rows, eos);
+  // If the first row has been fetched, then set the timeout to FETCH_ROWS_TIMEOUT_MS. If
+  // the first row has not been fetched, then it is possible the client spent time
+  // waiting for the query to 'finish' before issuing a GetNext() request.
+  uint64_t timeout =
+      !first_row_fetched_ && parent_request_state_->block_on_wait_time_us_ >= 0 ?
+      max(static_cast<uint64_t>(1), parent_request_state_->fetch_rows_timeout_us()
+              - parent_request_state_->block_on_wait_time_us_) :
+      parent_request_state_->fetch_rows_timeout_us();
+
+  Status status = coord_sink_->GetNext(runtime_state, results, max_rows, eos, timeout);
   if (!first_row_fetched_ && results->size() > 0) {
     query_events_->MarkEvent("First row fetched");
     first_row_fetched_ = true;

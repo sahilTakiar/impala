@@ -156,12 +156,13 @@ Status& Status::operator=(const TStatus& status) {
 }
 
 Status::Status(const apache::hive::service::cli::thrift::TStatus& hs2_status)
-  : msg_(
-      hs2_status.statusCode
-        == apache::hive::service::cli::thrift::TStatusCode::SUCCESS_STATUS ? NULL
-          : new ErrorMsg(HS2TStatusCodeToTErrorCode(hs2_status.statusCode),
-              hs2_status.errorMessage)) {
-}
+  : msg_(hs2_status.statusCode
+                    == apache::hive::service::cli::thrift::TStatusCode::SUCCESS_STATUS
+                || hs2_status.statusCode == apache::hive::service::cli::thrift::
+                                                TStatusCode::STILL_EXECUTING_STATUS ?
+            NULL :
+            new ErrorMsg(HS2TStatusCodeToTErrorCode(hs2_status.statusCode),
+                hs2_status.errorMessage)) {}
 
 Status Status::Expected(const ErrorMsg& error_msg) {
   return Status(error_msg, true);
