@@ -98,6 +98,7 @@ if target_filesystem == 's3':
     CONFIG.update({
       'fs.s3a.metadatastore.impl':
         'org.apache.hadoop.fs.s3a.s3guard.DynamoDBMetadataStore',
+      'fs.s3a.metadatastore.authoritative': 'true',
       'fs.s3a.s3guard.ddb.table': '${S3GUARD_DYNAMODB_TABLE}',
       'fs.s3a.s3guard.ddb.region': '${S3GUARD_DYNAMODB_REGION}',
     })
