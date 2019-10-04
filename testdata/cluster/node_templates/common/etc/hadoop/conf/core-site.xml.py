@@ -93,6 +93,10 @@ CONFIG = {
 
 if target_filesystem == 's3':
   CONFIG.update({'fs.s3a.connection.maximum': 1500})
+  CONFIG.update({
+    'fs.s3a.fast.upload.buffer': 'bytebuffer',
+    'fs.s3a.fast.upload.active.blocks': '8',
+  })
   s3guard_enabled = os.environ.get("S3GUARD_ENABLED") == 'true'
   if s3guard_enabled:
     CONFIG.update({
