@@ -58,6 +58,7 @@ void ImpalaServer::query(QueryHandle& query_handle, const Query& query) {
   RAISE_IF_ERROR(
       session_handle.WithBeeswaxSession(ThriftServer::GetThreadConnectionId(), &session),
       SQLSTATE_GENERAL_ERROR);
+  Query* query_ = new Query(query);
   TQueryCtx query_ctx;
   // raise general error for request conversion error;
   RAISE_IF_ERROR(QueryToTQueryContext(query, &query_ctx), SQLSTATE_GENERAL_ERROR);
@@ -65,7 +66,7 @@ void ImpalaServer::query(QueryHandle& query_handle, const Query& query) {
   // raise Syntax error or access violation; it's likely to be syntax/analysis error
   // TODO: that may not be true; fix this
   shared_ptr<ClientRequestState> request_state;
-  RAISE_IF_ERROR(Execute(&query_ctx, session, &request_state),
+  RAISE_IF_ERROR(Execute(&query_ctx, query, session, &request_state, query_),
       SQLSTATE_SYNTAX_ERROR_OR_ACCESS_VIOLATION);
 
   // start thread to wait for results to become available, which will allow
@@ -110,7 +111,7 @@ void ImpalaServer::executeAndWait(QueryHandle& query_handle, const Query& query,
 
   // raise Syntax error or access violation; it's likely to be syntax/analysis error
   // TODO: that may not be true; fix this
-  RAISE_IF_ERROR(Execute(&query_ctx, session, &request_state),
+  RAISE_IF_ERROR(Execute(&query_ctx, query, session, &request_state),
       SQLSTATE_SYNTAX_ERROR_OR_ACCESS_VIOLATION);
 
   // Once the query is running do a final check for session closure and add it to the
@@ -283,10 +284,73 @@ beeswax::QueryState::type ImpalaServer::get_state(const QueryHandle& handle) {
       query_id), SQLSTATE_GENERAL_ERROR);
   // Take the lock to ensure that if the client sees a query_state == EXCEPTION, it is
   // guaranteed to see the error query_status.
-  lock_guard<mutex> l(*request_state->lock());
-  beeswax::QueryState::type query_state = request_state->BeeswaxQueryState();
-  DCHECK_EQ(query_state == beeswax::QueryState::EXCEPTION,
-      !request_state->query_status().ok());
+  beeswax::QueryState::type query_state;
+  {
+    lock_guard<mutex> l(*request_state->lock());
+    query_state = request_state->BeeswaxQueryState();
+    DCHECK_EQ(query_state == beeswax::QueryState::EXCEPTION,
+        !request_state->query_status().ok());
+  }
+  if (request_state->query_status().IsRetryableError()) {
+    VLOG_QUERY << "Retrying query because of status = " << request_state->query_status();
+    TExecRequest* result = request_state->result_;
+    //VLOG_QUERY << "Cancelling query";
+    //RAISE_IF_ERROR(request_state->Cancel(false, nullptr), SQLSTATE_GENERAL_ERROR);
+    VLOG_QUERY << "Unregistering query";
+    RAISE_IF_ERROR(UnregisterQuery(query_id, true), SQLSTATE_GENERAL_ERROR);
+
+    DCHECK(request_state->GetCoordinator()->query_ctx().__isset.desc_tbl_serialized);
+    //DCHECK(request_state->query_ctx().__isset.desc_tbl_serialized);
+    TQueryCtx* query_ctx = new TQueryCtx(request_state->GetCoordinator()->query_ctx());
+    // raise general error for request conversion error;
+    // TODO: Is this necessary?
+    RAISE_IF_ERROR(QueryToTQueryContext(*(request_state->query()), query_ctx), SQLSTATE_GENERAL_ERROR);
+    PrepareQueryContext(query_ctx);
+
+    VLOG_QUERY << "Creating new ClientRequestState";
+    shared_ptr<ClientRequestState> retry_request_state;
+    retry_request_state.reset(new ClientRequestState(*query_ctx, exec_env_,
+        exec_env_->frontend(), this, session, request_state->query()));
+
+    retry_request_state->set_user_profile_access(result->user_has_profile_access);
+    retry_request_state->summary_profile()->AddEventSequence(
+        result->timeline.name, result->timeline);
+    retry_request_state->SetFrontendProfile(result->profile);
+    if (result->__isset.result_set_metadata) {
+      retry_request_state->set_result_metadata(result->result_set_metadata);
+    }
+
+    VLOG_QUERY << "Re-registering query";
+    RAISE_IF_ERROR(RegisterQuery(session, retry_request_state), SQLSTATE_GENERAL_ERROR);
+
+    // Associate the old query_id with the new ClientRequestState so that existing
+    // QueryHandles still work
+    {
+      DCHECK_EQ(this, ExecEnv::GetInstance()->impala_server());
+      ScopedShardedMapRef<std::shared_ptr<ClientRequestState>> map_ref(
+          query_id, &client_request_state_map_);
+      DCHECK(map_ref.get() != nullptr);
+
+      auto entry = map_ref->find(query_id);
+      if (entry != map_ref->end()) {
+        // There shouldn't be an active query with that same id.
+        // (query_id is globally unique)
+        stringstream ss;
+        ss << "query id " << PrintId(query_id) << " already exists";
+        RAISE_IF_ERROR(Status(ErrorMsg(TErrorCode::INTERNAL_ERROR, ss.str())),
+            SQLSTATE_GENERAL_ERROR);
+      }
+      map_ref->insert(make_pair(query_id, retry_request_state));
+    }
+
+    VLOG_QUERY << "Calling ClientRequestState::Exec";
+    result->query_exec_request.__set_query_ctx(*query_ctx);
+    RAISE_IF_ERROR(retry_request_state->Exec(result), SQLSTATE_GENERAL_ERROR);
+    VLOG_QUERY << "Calling ClientRequestState::WaitAsync";
+    RAISE_IF_ERROR(retry_request_state->WaitAsync(), SQLSTATE_GENERAL_ERROR);
+    RAISE_IF_ERROR(SetQueryInflight(session, retry_request_state), SQLSTATE_GENERAL_ERROR);
+    return beeswax::QueryState::RUNNING;
+  }
   return query_state;
 }
 

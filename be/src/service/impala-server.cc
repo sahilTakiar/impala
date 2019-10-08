@@ -877,9 +877,9 @@ void ImpalaServer::AddPoolConfiguration(TQueryCtx* ctx,
   }
 }
 
-Status ImpalaServer::Execute(TQueryCtx* query_ctx,
+Status ImpalaServer::Execute(TQueryCtx* query_ctx, const Query& query,
     shared_ptr<SessionState> session_state,
-    shared_ptr<ClientRequestState>* request_state) {
+    shared_ptr<ClientRequestState>* request_state, Query* query2) {
   PrepareQueryContext(query_ctx);
   ScopedThreadContext debug_ctx(GetThreadDebugInfo(), query_ctx->query_id);
   ImpaladMetrics::IMPALA_SERVER_NUM_QUERIES->Increment(1L);
@@ -891,7 +891,7 @@ Status ImpalaServer::Execute(TQueryCtx* query_ctx,
 
   bool registered_request_state;
   Status status = ExecuteInternal(*query_ctx, session_state, &registered_request_state,
-      request_state);
+      request_state, query2);
   if (!status.ok() && registered_request_state) {
     discard_result(UnregisterQuery((*request_state)->query_id(), false, &status));
   }
@@ -902,16 +902,17 @@ Status ImpalaServer::ExecuteInternal(
     const TQueryCtx& query_ctx,
     shared_ptr<SessionState> session_state,
     bool* registered_request_state,
-    shared_ptr<ClientRequestState>* request_state) {
+    shared_ptr<ClientRequestState>* request_state, Query* query2) {
   DCHECK(session_state != nullptr);
   *registered_request_state = false;
 
   request_state->reset(new ClientRequestState(query_ctx, exec_env_, exec_env_->frontend(),
-      this, session_state));
+      this, session_state, query2));
 
   (*request_state)->query_events()->MarkEvent("Query submitted");
 
-  TExecRequest result;
+  (*request_state)->result_ = new TExecRequest();
+  const TExecRequest& result = *(*request_state)->result_;
   {
     // Keep a lock on request_state so that registration and setting
     // result_metadata are atomic.
@@ -940,7 +941,7 @@ Status ImpalaServer::ExecuteInternal(
     }
 
     RETURN_IF_ERROR((*request_state)->UpdateQueryStatus(
-        exec_env_->frontend()->GetExecRequest(query_ctx, &result)));
+        exec_env_->frontend()->GetExecRequest(query_ctx, (*request_state)->result_)));
 
     (*request_state)->query_events()->MarkEvent("Planning finished");
     (*request_state)->set_user_profile_access(result.user_has_profile_access);
@@ -954,7 +955,7 @@ Status ImpalaServer::ExecuteInternal(
   VLOG(2) << "Execution request: " << ThriftDebugString(result);
 
   // start execution of query; also starts fragment status reports
-  RETURN_IF_ERROR((*request_state)->Exec(&result));
+  RETURN_IF_ERROR((*request_state)->Exec((*request_state)->result_));
   Status status = UpdateCatalogMetrics();
   if (!status.ok()) {
     VLOG_QUERY << "Couldn't update catalog metrics: " << status.GetDetail();

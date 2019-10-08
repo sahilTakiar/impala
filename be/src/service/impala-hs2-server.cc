@@ -143,8 +143,8 @@ void ImpalaServer::ExecuteMetadataOp(const THandleIdentifier& session_handle,
   const string& query_text = query_text_it == _TMetadataOpcode_VALUES_TO_NAMES.end() ?
       "N/A" : query_text_it->second;
   query_ctx.client_request.stmt = query_text;
-  request_state.reset(new ClientRequestState(query_ctx, exec_env_,
-      exec_env_->frontend(), this, session));
+  //request_state.reset(new ClientRequestState(query_ctx, exec_env_,
+  //    exec_env_->frontend(), this, session));
   Status register_status = RegisterQuery(session, request_state);
   if (!register_status.ok()) {
     status->__set_statusCode(thrift::TStatusCode::ERROR_STATUS);
@@ -480,7 +480,7 @@ void ImpalaServer::ExecuteStatement(TExecuteStatementResp& return_val,
   }
 
   shared_ptr<ClientRequestState> request_state;
-  status = Execute(&query_ctx, session, &request_state);
+  //status = Execute(&query_ctx, query, session, &request_state);
   HS2_RETURN_IF_ERROR(return_val, status, SQLSTATE_GENERAL_ERROR);
 
   // Start thread to wait for results to become available.
