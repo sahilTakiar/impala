@@ -635,7 +635,10 @@ class ImpalaServer : public ImpalaServiceIf,
   static const char* SQLSTATE_GENERAL_ERROR;
   static const char* SQLSTATE_OPTIONAL_FEATURE_NOT_IMPLEMENTED;
 
-  /// Return exec state for given query_id, or NULL if not found.
+  Status RetryQuery(
+      std::shared_ptr<ClientRequestState> request_state, TUniqueId query_id);
+
+  /// Return exec ste for given query_id, or NULL if not found.
   std::shared_ptr<ClientRequestState> GetClientRequestState(
       const TUniqueId& query_id);
 
@@ -662,13 +665,14 @@ class ImpalaServer : public ImpalaServiceIf,
   /// will be NULL and nothing will have been registered in client_request_state_map_.
   /// session_state is a ptr to the session running this query and must have been checked
   /// out.
-  Status Execute(TQueryCtx* query_ctx, std::shared_ptr<SessionState> session_state,
-      std::shared_ptr<ClientRequestState>* exec_state) WARN_UNUSED_RESULT;
+  Status Execute(TQueryCtx* query_ctx, const beeswax::Query& query,
+      std::shared_ptr<SessionState> session_state,
+      std::shared_ptr<ClientRequestState>* exec_state, beeswax::Query* query2 = nullptr) WARN_UNUSED_RESULT;
 
   /// Implements Execute() logic, but doesn't unregister query on error.
   Status ExecuteInternal(const TQueryCtx& query_ctx,
       std::shared_ptr<SessionState> session_state, bool* registered_exec_state,
-      std::shared_ptr<ClientRequestState>* exec_state) WARN_UNUSED_RESULT;
+      std::shared_ptr<ClientRequestState>* exec_state, beeswax::Query* query2) WARN_UNUSED_RESULT;
 
   /// Registers the query exec state with client_request_state_map_ using the
   /// globally unique query_id.

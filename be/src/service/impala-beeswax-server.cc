@@ -58,6 +58,7 @@ void ImpalaServer::query(QueryHandle& query_handle, const Query& query) {
   RAISE_IF_ERROR(
       session_handle.WithBeeswaxSession(ThriftServer::GetThreadConnectionId(), &session),
       SQLSTATE_GENERAL_ERROR);
+  Query* query_ = new Query(query);
   TQueryCtx query_ctx;
   // raise general error for request conversion error;
   RAISE_IF_ERROR(QueryToTQueryContext(query, &query_ctx), SQLSTATE_GENERAL_ERROR);
@@ -65,13 +66,14 @@ void ImpalaServer::query(QueryHandle& query_handle, const Query& query) {
   // raise Syntax error or access violation; it's likely to be syntax/analysis error
   // TODO: that may not be true; fix this
   shared_ptr<ClientRequestState> request_state;
-  RAISE_IF_ERROR(Execute(&query_ctx, session, &request_state),
+  RAISE_IF_ERROR(Execute(&query_ctx, query, session, &request_state, query_),
       SQLSTATE_SYNTAX_ERROR_OR_ACCESS_VIOLATION);
 
   // start thread to wait for results to become available, which will allow
   // us to advance query state to FINISHED or EXCEPTION
   Status status = request_state->WaitAsync();
   if (!status.ok()) {
+    VLOG_QUERY << "WaitAsync failed " << status;
     discard_result(UnregisterQuery(request_state->query_id(), false, &status));
     RaiseBeeswaxException(status.GetDetail(), SQLSTATE_GENERAL_ERROR);
   }
@@ -79,6 +81,7 @@ void ImpalaServer::query(QueryHandle& query_handle, const Query& query) {
   // set of in-flight queries.
   status = SetQueryInflight(session, request_state);
   if (!status.ok()) {
+    VLOG_QUERY << "SetQueryInflight failed " << status;
     discard_result(UnregisterQuery(request_state->query_id(), false, &status));
     RaiseBeeswaxException(status.GetDetail(), SQLSTATE_GENERAL_ERROR);
   }
@@ -110,7 +113,7 @@ void ImpalaServer::executeAndWait(QueryHandle& query_handle, const Query& query,
 
   // raise Syntax error or access violation; it's likely to be syntax/analysis error
   // TODO: that may not be true; fix this
-  RAISE_IF_ERROR(Execute(&query_ctx, session, &request_state),
+  RAISE_IF_ERROR(Execute(&query_ctx, query, session, &request_state),
       SQLSTATE_SYNTAX_ERROR_OR_ACCESS_VIOLATION);
 
   // Once the query is running do a final check for session closure and add it to the
@@ -173,7 +176,7 @@ void ImpalaServer::fetch(Results& query_results, const QueryHandle& query_handle
 
   TUniqueId query_id;
   QueryHandleToTUniqueId(query_handle, &query_id);
-  VLOG_ROW << "fetch(): query_id=" << PrintId(query_id) << " fetch_size=" << fetch_size;
+  VLOG_QUERY << "fetch(): query_id=" << PrintId(query_id) << " fetch_size=" << fetch_size;
 
   shared_ptr<ClientRequestState> request_state = GetClientRequestState(query_id);
   if (UNLIKELY(request_state == nullptr)) {
@@ -270,7 +273,6 @@ beeswax::QueryState::type ImpalaServer::get_state(const QueryHandle& handle) {
       ThriftServer::GetThreadConnectionId(), &session), SQLSTATE_GENERAL_ERROR);
   TUniqueId query_id;
   QueryHandleToTUniqueId(handle, &query_id);
-  VLOG_ROW << "get_state(): query_id=" << PrintId(query_id);
 
   shared_ptr<ClientRequestState> request_state = GetClientRequestState(query_id);
   if (UNLIKELY(request_state == nullptr)) {
@@ -283,10 +285,19 @@ beeswax::QueryState::type ImpalaServer::get_state(const QueryHandle& handle) {
       query_id), SQLSTATE_GENERAL_ERROR);
   // Take the lock to ensure that if the client sees a query_state == EXCEPTION, it is
   // guaranteed to see the error query_status.
-  lock_guard<mutex> l(*request_state->lock());
-  beeswax::QueryState::type query_state = request_state->BeeswaxQueryState();
-  DCHECK_EQ(query_state == beeswax::QueryState::EXCEPTION,
-      !request_state->query_status().ok());
+  beeswax::QueryState::type query_state;
+  {
+    lock_guard<mutex> l(*request_state->lock());
+    query_state = request_state->BeeswaxQueryState();
+    DCHECK_EQ(query_state == beeswax::QueryState::EXCEPTION,
+        !request_state->query_status().ok());
+  }
+  VLOG_QUERY << "get_state(): query_id=" << PrintId(query_id)
+             << " query_state = " << query_state;
+  if (request_state->query_status().IsRetryableError()) {
+    RAISE_IF_ERROR(RetryQuery(request_state, query_id), SQLSTATE_GENERAL_ERROR);
+    return beeswax::QueryState::RUNNING;
+  }
   return query_state;
 }
 

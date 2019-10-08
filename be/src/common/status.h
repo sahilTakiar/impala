@@ -267,6 +267,14 @@ class NODISCARD Status {
           msg_->error() == TErrorCode::THREAD_POOL_TASK_TIMED_OUT);
   }
 
+  void SetIsRetryable() {
+    if (msg_ != NULL) msg_->SetErrorType(ErrorMsg::ErrorType::RETRYABLE);
+  }
+
+  bool IsRetryableError() const {
+    return msg_ != NULL && msg_->type() == ErrorMsg::ErrorType::RETRYABLE;
+  }
+
   /// Returns the error message associated with a non-successful status.
   const ErrorMsg& msg() const {
     DCHECK(msg_ != NULL);

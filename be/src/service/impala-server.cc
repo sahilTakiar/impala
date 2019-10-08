@@ -877,9 +877,9 @@ void ImpalaServer::AddPoolConfiguration(TQueryCtx* ctx,
   }
 }
 
-Status ImpalaServer::Execute(TQueryCtx* query_ctx,
+Status ImpalaServer::Execute(TQueryCtx* query_ctx, const Query& query,
     shared_ptr<SessionState> session_state,
-    shared_ptr<ClientRequestState>* request_state) {
+    shared_ptr<ClientRequestState>* request_state, Query* query2) {
   PrepareQueryContext(query_ctx);
   ScopedThreadContext debug_ctx(GetThreadDebugInfo(), query_ctx->query_id);
   ImpaladMetrics::IMPALA_SERVER_NUM_QUERIES->Increment(1L);
@@ -891,7 +891,7 @@ Status ImpalaServer::Execute(TQueryCtx* query_ctx,
 
   bool registered_request_state;
   Status status = ExecuteInternal(*query_ctx, session_state, &registered_request_state,
-      request_state);
+      request_state, query2);
   if (!status.ok() && registered_request_state) {
     discard_result(UnregisterQuery((*request_state)->query_id(), false, &status));
   }
@@ -902,16 +902,17 @@ Status ImpalaServer::ExecuteInternal(
     const TQueryCtx& query_ctx,
     shared_ptr<SessionState> session_state,
     bool* registered_request_state,
-    shared_ptr<ClientRequestState>* request_state) {
+    shared_ptr<ClientRequestState>* request_state, Query* query2) {
   DCHECK(session_state != nullptr);
   *registered_request_state = false;
 
   request_state->reset(new ClientRequestState(query_ctx, exec_env_, exec_env_->frontend(),
-      this, session_state));
+      this, session_state, query2));
 
   (*request_state)->query_events()->MarkEvent("Query submitted");
 
-  TExecRequest result;
+  (*request_state)->result_ = new TExecRequest();
+  const TExecRequest& result = *(*request_state)->result_;
   {
     // Keep a lock on request_state so that registration and setting
     // result_metadata are atomic.
@@ -940,7 +941,7 @@ Status ImpalaServer::ExecuteInternal(
     }
 
     RETURN_IF_ERROR((*request_state)->UpdateQueryStatus(
-        exec_env_->frontend()->GetExecRequest(query_ctx, &result)));
+        exec_env_->frontend()->GetExecRequest(query_ctx, (*request_state)->result_)));
 
     (*request_state)->query_events()->MarkEvent("Planning finished");
     (*request_state)->set_user_profile_access(result.user_has_profile_access);
@@ -954,7 +955,7 @@ Status ImpalaServer::ExecuteInternal(
   VLOG(2) << "Execution request: " << ThriftDebugString(result);
 
   // start execution of query; also starts fragment status reports
-  RETURN_IF_ERROR((*request_state)->Exec(&result));
+  RETURN_IF_ERROR((*request_state)->Exec((*request_state)->result_));
   Status status = UpdateCatalogMetrics();
   if (!status.ok()) {
     VLOG_QUERY << "Couldn't update catalog metrics: " << status.GetDetail();
@@ -1458,12 +1459,14 @@ void ImpalaServer::CancelFromThreadPool(uint32_t thread_id,
                  << ") failed";
     }
   } else {
-    VLOG_QUERY << "CancelFromThreadPool(): cancelling query_id=" << PrintId(query_id);
-    Status status = request_state->Cancel(true, &error);
-    if (!status.ok()) {
-      VLOG_QUERY << "Query cancellation (" << PrintId(cancellation_work.query_id())
-                 << ") did not succeed: " << status.GetDetail();
-    }
+    // TODO race condition, between this retry and the Coordinator driven one
+    //Status status = RetryQuery(request_state, query_id);
+    //VLOG_QUERY << "CancelFromThreadPool(): cancelling query_id=" << PrintId(query_id);
+    //Status status = request_state->Cancel(true, &error);
+    //if (!status.ok()) {
+    //  VLOG_QUERY << "Query retry (" << PrintId(cancellation_work.query_id())
+    //             << ") did not succeed: " << status.GetDetail();
+    //}
   }
 }
 
@@ -2561,6 +2564,68 @@ void ImpalaServer::UpdateFilter(TUpdateFilterResult& result,
     return;
   }
   client_request_state->UpdateFilter(params);
+}
+
+Status ImpalaServer::RetryQuery(
+    shared_ptr<ClientRequestState> request_state, TUniqueId query_id) {
+  VLOG_QUERY << "Retrying query";
+  TExecRequest* result = request_state->result_;
+  // VLOG_QUERY << "Cancelling query";
+  // RAISE_IF_ERROR(request_state->Cancel(false, nullptr), SQLSTATE_GENERAL_ERROR);
+  VLOG_QUERY << "Unregistering query";
+  RETURN_IF_ERROR(UnregisterQuery(query_id, true));
+
+  DCHECK(request_state->GetCoordinator()->query_ctx().__isset.desc_tbl_serialized);
+  // DCHECK(request_state->query_ctx().__isset.desc_tbl_serialized);
+  TQueryCtx* query_ctx = new TQueryCtx(request_state->GetCoordinator()->query_ctx());
+  // raise general error for request conversion error;
+  // TODO: Is this necessary?
+  RETURN_IF_ERROR(QueryToTQueryContext(*(request_state->query()), query_ctx));
+  PrepareQueryContext(query_ctx);
+
+  VLOG_QUERY << "Creating new ClientRequestState";
+  shared_ptr<ClientRequestState> retry_request_state;
+  retry_request_state.reset(
+      new ClientRequestState(*query_ctx, exec_env_, exec_env_->frontend(), this,
+          request_state->session_shared(), request_state->query()));
+
+  retry_request_state->set_user_profile_access(result->user_has_profile_access);
+  retry_request_state->summary_profile()->AddEventSequence(
+      result->timeline.name, result->timeline);
+  retry_request_state->SetFrontendProfile(result->profile);
+  if (result->__isset.result_set_metadata) {
+    retry_request_state->set_result_metadata(result->result_set_metadata);
+  }
+
+  VLOG_QUERY << "Re-registering query";
+  RETURN_IF_ERROR(RegisterQuery(request_state->session_shared(), retry_request_state));
+
+  // Associate the old query_id with the new ClientRequestState so that existing
+  // QueryHandles still work
+  {
+    DCHECK_EQ(this, ExecEnv::GetInstance()->impala_server());
+    ScopedShardedMapRef<std::shared_ptr<ClientRequestState>> map_ref(
+        query_id, &client_request_state_map_);
+    DCHECK(map_ref.get() != nullptr);
+
+    auto entry = map_ref->find(query_id);
+    if (entry != map_ref->end()) {
+      // There shouldn't be an active query with that same id.
+      // (query_id is globally unique)
+      stringstream ss;
+      ss << "query id " << PrintId(query_id) << " already exists";
+      RETURN_IF_ERROR(Status(ErrorMsg(TErrorCode::INTERNAL_ERROR, ss.str())));
+    }
+    map_ref->insert(make_pair(query_id, retry_request_state));
+  }
+
+  VLOG_QUERY << "Calling ClientRequestState::Exec";
+  result->query_exec_request.__set_query_ctx(*query_ctx);
+  RETURN_IF_ERROR(retry_request_state->Exec(result));
+  VLOG_QUERY << "Calling ClientRequestState::WaitAsync";
+  RETURN_IF_ERROR(retry_request_state->WaitAsync());
+  RETURN_IF_ERROR(SetQueryInflight(request_state->session_shared(), retry_request_state));
+  return Status::OK();
 }
 
 Status ImpalaServer::CheckNotShuttingDown() const {

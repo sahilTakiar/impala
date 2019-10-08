@@ -64,7 +64,7 @@ enum class AdmissionOutcome;
 class ClientRequestState {
  public:
   ClientRequestState(const TQueryCtx& query_ctx, ExecEnv* exec_env, Frontend* frontend,
-      ImpalaServer* server, std::shared_ptr<ImpalaServer::SessionState> session);
+      ImpalaServer* server, std::shared_ptr<ImpalaServer::SessionState> session, beeswax::Query* query);
 
   ~ClientRequestState();
 
@@ -186,10 +186,13 @@ class ClientRequestState {
 
   ImpalaServer::SessionState* session() const { return session_.get(); }
 
+  std::shared_ptr<ImpalaServer::SessionState> session_shared() const { return session_; }
+
   /// Queries are run and authorized on behalf of the effective_user.
   const std::string& effective_user() const {
       return GetEffectiveUser(query_ctx_.session);
   }
+  const TQueryCtx& query_ctx() const { return query_ctx_; }
   const std::string& connected_user() const { return query_ctx_.session.connected_user; }
   bool user_has_profile_access() const { return user_has_profile_access_; }
   const std::string& do_as_user() const { return query_ctx_.session.delegated_user; }
@@ -198,6 +201,7 @@ class ClientRequestState {
   const std::string& default_db() const { return query_ctx_.session.database; }
   bool eos() const { return eos_; }
   const QuerySchedule* schedule() const { return schedule_.get(); }
+  beeswax::Query* query() const { return query_; }
 
   /// Returns the Coordinator for 'QUERY' and 'DML' requests once Coordinator::Exec()
   /// completes successfully. Otherwise returns null.
@@ -286,6 +290,8 @@ class ClientRequestState {
 
   /// Returns the FETCH_ROWS_TIMEOUT_MS value for this query (converted to microseconds).
   int64_t fetch_rows_timeout_us() const { return fetch_rows_timeout_us_; }
+
+  TExecRequest* result_;
 
 protected:
   /// Updates the end_time_us_ of this query if it isn't set. The end time is determined
@@ -609,6 +615,8 @@ protected:
   /// Logs audit and column lineage events. Expects that Wait() has already finished.
   /// Grabs lock_ for polling the query_status(). Hence do not call it under lock_.
   void LogQueryEvents();
+
+  beeswax::Query* query_;
 };
 
 }

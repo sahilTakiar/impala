@@ -17,6 +17,7 @@
 
 #include "runtime/coordinator.h"
 
+#include <regex>
 #include <unordered_set>
 
 #include <thrift/protocol/TDebugProtocol.h>
@@ -778,6 +779,33 @@ Status Coordinator::UpdateBackendExecStatus(const ReportExecStatusRequestPB& req
       discard_result(UpdateExecState(status,
               is_fragment_failure ? &failed_instance_id : nullptr,
               TNetworkAddressToString(backend_state->impalad_address())));
+      if (status.IsRetryableError()) {
+        VLOG_QUERY << "Attempting to parse error message " << status.GetDetail();
+        string s = status.GetDetail();
+        std::regex rgx("TransmitData\\(\\) to (.*) failed");
+        std::smatch match;
+        string dest_url;
+        if (std::regex_search(s, match, rgx)) {
+          dest_url = match[1];
+        }
+        vector<string> strs;
+        boost::split(strs, dest_url, boost::is_any_of(":"));
+        string host = strs[0];
+        int32_t port = std::stoi(strs[1]);
+        TNetworkAddress dest;
+        dest.__set_port(port);
+        dest.__set_hostname(host);
+        for (auto be_state : backend_states_) {
+          if (be_state->krpc_impalad_address().port == dest.port) {
+            // The Exec() rpc failed, so blacklist the executor.
+            LOG(INFO) << "Blacklisting "
+                      << TNetworkAddressToString(dest)
+                      << " because a TransmitData() rpc to it failed.";
+            const TBackendDescriptor& be_desc = be_state->exec_params()->be_desc;
+            ExecEnv::GetInstance()->cluster_membership_mgr()->BlacklistExecutor(be_desc);
+          }
+        }
+      }
     }
     // We've applied all changes from the final status report - notify waiting threads.
     discard_result(backend_exec_complete_barrier_->Notify());
