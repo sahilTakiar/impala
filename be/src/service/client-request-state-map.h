@@ -34,17 +34,21 @@ class ClientRequestStateMap
  public:
   /// Adds the given (query_id, request_state) pair to the map. Returns an error Status
   /// if the query id already exists in the map.
-  Status AddClientRequestState(
-      const TUniqueId& query_id, std::shared_ptr<ClientRequestState> request_state) {
+  Status AddClientRequestState(const TUniqueId& query_id,
+      std::shared_ptr<ClientRequestState> request_state, bool overwrite = false) {
     ScopedShardedMapRef<std::shared_ptr<ClientRequestState>> map_ref(query_id, this);
     DCHECK(map_ref.get() != nullptr);
 
     auto entry = map_ref->find(query_id);
     if (entry != map_ref->end()) {
-      // There shouldn't be an active query with that same id.
-      // (query_id is globally unique)
-      return Status(ErrorMsg(TErrorCode::INTERNAL_ERROR,
-          strings::Substitute("query id $0 already exists", PrintId(query_id))));
+      if (overwrite) {
+        map_ref->erase(entry);
+      } else {
+        // There shouldn't be an active query with that same id.
+        // (query_id is globally unique)
+        return Status(ErrorMsg(TErrorCode::INTERNAL_ERROR,
+            strings::Substitute("query id $0 already exists", PrintId(query_id))));
+      }
     }
     map_ref->insert(make_pair(query_id, request_state));
     return Status::OK();

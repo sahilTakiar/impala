@@ -32,15 +32,30 @@ namespace impala {
 /// Handles all webserver callbacks for an ImpalaServer. This class is a friend of
 /// ImpalaServer in order to access the internal state needed to generate the debug
 /// webpages.
-class ImpalaHttpHandler {
+class ImpalaHttpHandler : public CacheLineAligned {
  public:
   ImpalaHttpHandler(ImpalaServer* server) : server_(server) { }
 
   /// Registers all the per-Impalad webserver callbacks
   void RegisterHandlers(Webserver* webserver);
 
+  /// Registers a running query with the HTTP handler. Called when a query is registered
+  /// by the ImpalaServer.
+  Status RegisterQuery(const TUniqueId& query_id,
+      const std::shared_ptr<ClientRequestState>& request_state);
+
+  /// Unregisters a finished query from the HTTP handler. Called when a query is
+  /// unregistered by the ImpalaServer.
+  Status UnregisterQuery(const TUniqueId& query_id);
+
  private:
   ImpalaServer* server_;
+
+  /// Tracks the ClientRequestStates of the currently registered queries. Unlike the
+  /// ImpalaServer::client_request_state_map_ this map is guaranteed to not have any
+  /// duplicate ClientRequestStates. ClientRequestStateMap is a ShardedQueryMap so it is
+  /// thread safe.
+  ClientRequestStateMap client_request_state_map_;
 
   /// Raw callback to indicate whether the server is ready to accept queries.
   void HealthzHandler(const Webserver::WebRequest& req, std::stringstream* data,

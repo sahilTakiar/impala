@@ -556,7 +556,8 @@ class Coordinator { // NOLINT: The member variables could be re-ordered to save 
   /// AuxErrorInfoPB to classify specific nodes as "faulty" and then blacklists them. A
   /// node might be considered "faulty" if, for example, a RPC to that node failed, or a
   /// fragment on that node failed due to a disk IO error.
-  void UpdateBlacklistWithAuxErrorInfo(const ReportExecStatusRequestPB& request);
+  void UpdateBlacklistWithAuxErrorInfo(
+      const ReportExecStatusRequestPB& request, Status status);
 
   /// BackendState and BackendResourceState are private to the Coordinator class, so mark
   /// all tests in CoordinatorBackendStateTest as friends.

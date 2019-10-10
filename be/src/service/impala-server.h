@@ -56,6 +56,7 @@ class ExecEnv;
 class DataSink;
 class CancellationWork;
 class ImpalaHttpHandler;
+class RetryWork;
 class RowDescriptor;
 class TCatalogUpdate;
 class TPlanExecRequest;
@@ -344,6 +345,10 @@ class ImpalaServer : public ImpalaServiceIf,
   /// operation.
   virtual void CloseImpalaOperation(
       TCloseImpalaOperationResp& return_val, const TCloseImpalaOperationReq& request);
+
+  /// Schedule a retry of the query with the given query_id. The retry will be done
+  /// asynchronously by a dedicated threadpool.
+  void RetryAsync(const TUniqueId& query_id, const Status& error);
 
   /// ImpalaInternalService rpcs
   void UpdateFilter(TUpdateFilterResult& return_val, const TUpdateFilterParams& params);
@@ -645,6 +650,12 @@ class ImpalaServer : public ImpalaServiceIf,
   std::shared_ptr<ClientRequestState> GetClientRequestState(
       const TUniqueId& query_id);
 
+  /// Return exec state for given query_id, or NULL if not found. Unlike
+  // GetClientRequestState, this method does not return a ClientRequestState for queries
+  // that have been retried.
+  std::shared_ptr<ClientRequestState> GetRunningClientRequestState(
+      const TUniqueId& query_id);
+
   /// Used in situations where the client provides a session ID and a query ID and the
   /// caller needs to validate that the query can be accessed from the session. The two
   /// arguments are the session obtained by looking up the session ID provided by the
@@ -707,7 +718,7 @@ class ImpalaServer : public ImpalaServiceIf,
   /// query from the inflight queries list, updates query_locations_, and archives the
   /// query. Used when unregistering the query.
   Status CloseClientRequestState(
-      const std::shared_ptr<ClientRequestState>& request_state);
+      const std::shared_ptr<ClientRequestState>& request_state) WARN_UNUSED_RESULT;
 
   /// Initiates query cancellation reporting the given cause as the query status.
   /// Assumes deliberate cancellation by the user if the cause is NULL.  Returns an
@@ -917,8 +928,12 @@ class ImpalaServer : public ImpalaServiceIf,
   [[noreturn]] void RaiseBeeswaxException(const std::string& msg, const char* sql_state);
 
   /// Executes the fetch logic. Doesn't clean up the exec state if an error occurs.
-  Status FetchInternal(ClientRequestState* request_state, bool start_over,
+  Status FetchInternal(TUniqueId query_id, bool start_over,
       int32_t fetch_size, beeswax::Results* query_results) WARN_UNUSED_RESULT;
+
+  /// Blocks until results are ready to be fetched, or until the given timeout is hit.
+  void BlockOnWait(std::shared_ptr<ClientRequestState>* request_state,
+      beeswax::Results* query_results, bool* timed_out, int64_t* block_on_wait_time_us);
 
   /// Populate dml_result and clean up exec state. If the query
   /// status is an error, dml_result is not populated and the status is returned.
@@ -970,6 +985,14 @@ class ImpalaServer : public ImpalaServiceIf,
   /// CancelInternal directly, but has a signature compatible with the thread pool.
   void CancelFromThreadPool(uint32_t thread_id,
       const CancellationWork& cancellation_work);
+
+  /// Helper method to process query retries, called from the query retry thread pool. The
+  /// RetryWork contains the query id to retry and the reason the query failed. The failed
+  /// query is cancelled, and then a new ClientRequestState is created for the retried
+  /// query. The new ClientRequestState copies the TExecRequest from the failed query in
+  /// order to avoid query compilation and planning again. Once the new query is registered
+  /// and launched, the failed query is unregistered.
+  void RetryQueryFromThreadPool(uint32_t thread_id, const RetryWork& retry_work);
 
   /// Helper method to add the pool name and query options to the query_ctx. Must be
   /// called before ExecuteInternal() at which point the TQueryCtx is const and cannot
@@ -1069,6 +1092,10 @@ class ImpalaServer : public ImpalaServiceIf,
   /// Thread pool to process cancellation requests that come from failed Impala demons to
   /// avoid blocking the statestore callback.
   boost::scoped_ptr<ThreadPool<CancellationWork>> cancellation_thread_pool_;
+
+  /// Thread pool to process query retry requests that come from query state updates to
+  /// avoid blocking control service RPC threads.
+  boost::scoped_ptr<ThreadPool<RetryWork>> retry_thread_pool_;
 
   /// Thread that runs SessionMaintenance. It will wake up periodically to check for
   /// sessions which are idle for more their timeout values.
@@ -1260,6 +1287,11 @@ class ImpalaServer : public ImpalaServiceIf,
     DCHECK_GT(session->ref_count, 0);
     --session->ref_count;
     session->last_accessed_ms = UnixMillis();
+  }
+
+  inline void MarkSessionActive(std::shared_ptr<SessionState> session) {
+    boost::lock_guard<boost::mutex> l(session->lock);
+    ++session->ref_count;
   }
 
   /// Associate the current connection context with the given session in

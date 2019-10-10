@@ -468,6 +468,8 @@ Status Coordinator::FinishBackendStartup() {
                 << " because an Exec() rpc to it failed.";
       const TBackendDescriptor& be_desc = backend_state->exec_params()->be_desc;
       ExecEnv::GetInstance()->cluster_membership_mgr()->BlacklistExecutor(be_desc);
+      parent_request_state_->parent_server_->RetryAsync(
+          query_id(), backend_state->exec_rpc_status());
     }
     if (backend_state->rpc_latency() > max_latency) {
       // Find the backend that takes the most time to acknowledge to
@@ -840,7 +842,7 @@ Status Coordinator::UpdateBackendExecStatus(const ReportExecStatusRequestPB& req
 
       // Iterate through all instance exec statuses, and use each fragment's AuxErrorInfo
       // to possibly blacklist any "faulty" nodes.
-      UpdateBlacklistWithAuxErrorInfo(request);
+      UpdateBlacklistWithAuxErrorInfo(request, status);
 
       // Transition the status if we're not already in a terminal state. This won't block
       // because either this transitions to an ERROR state or the query is already in
@@ -871,7 +873,7 @@ Status Coordinator::UpdateBackendExecStatus(const ReportExecStatusRequestPB& req
 }
 
 void Coordinator::UpdateBlacklistWithAuxErrorInfo(
-    const ReportExecStatusRequestPB& request) {
+    const ReportExecStatusRequestPB& request, Status status) {
   // If the Backend failed due to a RPC failure, blacklist the destination node of
   // the failed RPC. Only blacklist one node per ReportExecStatusRequestPB to avoid
   // blacklisting nodes too aggressively. Currently, only blacklist the first node
@@ -922,6 +924,7 @@ void Coordinator::UpdateBlacklistWithAuxErrorInfo(
                   << " because a RPC to it failed.";
         ExecEnv::GetInstance()->cluster_membership_mgr()->BlacklistExecutor(
             dest_node_exec_params->be_desc);
+        parent_request_state_->parent_server_->RetryAsync(query_id(), status);
         break;
       }
     }
