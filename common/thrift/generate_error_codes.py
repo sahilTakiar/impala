@@ -463,6 +463,8 @@ error_codes = (
   # Note: impala_shell uses a regex to search for this specific error message, so
   # changing it may break older shell version.
   ("INVALID_QUERY_HANDLE", 150, "Invalid or unknown query handle: $0."),
+
+  ("RETRYABLE_ERROR", 151, "Retryable error: $0"),
 )
 
 import sys
