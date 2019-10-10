@@ -454,6 +454,8 @@ error_codes = (
   ("ORC_TYPE_NOT_ROOT_AT_STRUCT", 148,
    "Root of the $0 type returned by the ORC lib is not STRUCT: $1. "
    "Either there are bugs in the ORC lib or ORC file '$2' is corrupt."),
+
+  ("RETRYABLE_ERROR", 149, "Retryable error: $0"),
 )
 
 import sys

@@ -407,8 +407,7 @@ void ImpalaHttpHandler::QueryStateToJson(const ImpalaServer::QueryStateRecord& r
   Value progress_json(progress.c_str(), document->GetAllocator());
   value->AddMember("progress", progress_json, document->GetAllocator());
 
-  Value state(_QueryState_VALUES_TO_NAMES.find(record.query_state)->second,
-      document->GetAllocator());
+  Value state(record.query_state.c_str(), document->GetAllocator());
   value->AddMember("state", state, document->GetAllocator());
 
   value->AddMember("rows_fetched", record.num_rows_fetched, document->GetAllocator());
@@ -423,7 +422,7 @@ void ImpalaHttpHandler::QueryStateToJson(const ImpalaServer::QueryStateRecord& r
   }
 
   // Waiting to be closed.
-  bool waiting = record.query_state == beeswax::QueryState::EXCEPTION ||
+  bool waiting = record.beeswax_query_state == beeswax::QueryState::EXCEPTION ||
       record.all_rows_returned;
   value->AddMember("waiting", waiting, document->GetAllocator());
   value->AddMember("executing", !waiting, document->GetAllocator());

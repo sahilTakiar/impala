@@ -490,6 +490,7 @@ Status Coordinator::FinishBackendStartup() {
       const TBackendDescriptor& be_desc = backend_state->exec_params()->be_desc;
       ExecEnv::GetInstance()->cluster_membership_mgr()->BlacklistExecutor(
           be_desc, backend_state->exec_rpc_status());
+      RetryQuery(backend_state->exec_rpc_status());
     }
     if (backend_state->rpc_latency() > max_latency) {
       // Find the backend that takes the most time to acknowledge to
@@ -837,7 +838,12 @@ Status Coordinator::UpdateBackendExecStatus(const ReportExecStatusRequestPB& req
   if (thrift_profiles.__isset.host_profile) {
     backend_state->UpdateHostProfile(thrift_profiles.host_profile);
   }
+
+  // Set by ApplyExecStatusReport, contains all the AuxErrorInfoPB objects in
+  // ReportExecStatusRequestPB.
   vector<AuxErrorInfoPB> aux_error_info;
+
+  Status status = Status::OK();
 
   if (backend_state->ApplyExecStatusReport(request, thrift_profiles, &exec_summary_,
           &progress_, &dml_exec_state_, &aux_error_info)) {
@@ -855,7 +861,17 @@ Status Coordinator::UpdateBackendExecStatus(const ReportExecStatusRequestPB& req
     }
     bool is_fragment_failure;
     TUniqueId failed_instance_id;
-    Status status = backend_state->GetStatus(&is_fragment_failure, &failed_instance_id);
+    status = backend_state->GetStatus(&is_fragment_failure, &failed_instance_id);
+
+    // Iterate through all AuxErrorInfoPB objects, and use each one to possibly blacklist
+    // any "faulty" nodes. This needs to be done before UpdateExecState is called with
+    // the error status to avoid exposing the error to any clients.
+    Status retryable_status = UpdateBlacklistWithAuxErrorInfo(
+        &aux_error_info, status, backend_state);
+
+    // If any nodes were blacklisted, retry the query.
+    if (!retryable_status.ok()) RetryQuery(retryable_status);
+
     if (!status.ok()) {
       // We may start receiving status reports before all exec rpcs are complete.
       // Can't apply state transition until no more exec rpcs will be sent.
@@ -883,19 +899,24 @@ Status Coordinator::UpdateBackendExecStatus(const ReportExecStatusRequestPB& req
       }
     }
     num_completed_backends_->Add(1);
-  }
+  } else {
+    // Iterate through all AuxErrorInfoPB objects, and use each one to possibly blacklist
+    // any "faulty" nodes.
+    Status retryable_status = UpdateBlacklistWithAuxErrorInfo(
+        &aux_error_info, status, backend_state);
 
-  // Iterate through all AuxErrorInfoPB objects, and use each one to possibly blacklist
-  // any "faulty" nodes.
-  UpdateBlacklistWithAuxErrorInfo(&aux_error_info);
+    // If any nodes were blacklisted, retry the query.
+    if (!retryable_status.ok()) RetryQuery(retryable_status);
+  }
 
   // If query execution has terminated, return a cancelled status to force the fragment
   // instance to stop executing.
   return IsExecuting() ? Status::OK() : Status::CANCELLED;
 }
 
-void Coordinator::UpdateBlacklistWithAuxErrorInfo(
-    vector<AuxErrorInfoPB>* aux_error_info) {
+Status Coordinator::UpdateBlacklistWithAuxErrorInfo(
+    vector<AuxErrorInfoPB>* aux_error_info, const Status& status,
+    BackendState* backend_state) {
   // If the Backend failed due to a RPC failure, blacklist the destination node of
   // the failed RPC. Only blacklist one node per ReportExecStatusRequestPB to avoid
   // blacklisting nodes too aggressively. Currently, only blacklist the first node
@@ -933,20 +954,32 @@ void Coordinator::UpdateBlacklistWithAuxErrorInfo(
       // A set of RPC related posix error codes that should cause the target node
       // of the failed RPC to be blacklisted.
       static const set<int32_t> blacklistable_rpc_error_codes = {
+          ECONNRESET, // 104: Connection reset by peer
           ENOTCONN, // 107: Transport endpoint is not connected
           ESHUTDOWN, // 108: Cannot send after transport endpoint shutdown
-          ECONNREFUSED  // 111: Connection refused
+          ECONNREFUSED // 111: Connection refused
       };
 
       if (blacklistable_rpc_error_codes.find(rpc_error_info.posix_error_code())
           != blacklistable_rpc_error_codes.end()) {
+        string src_node_addr =
+            TNetworkAddressToString(backend_state->krpc_impalad_address());
+        string dest_node_addr = NetworkAddressPBToString(dest_node);
+        LOG(INFO) << "Blacklisting " << dest_node_addr << " because a RPC to it failed.";
+
+        Status retryable_status = Status(TErrorCode::RETRYABLE_ERROR,
+            Substitute("RPC from $0 to $1 failed", src_node_addr, dest_node_addr));
+        retryable_status.MergeStatus(status);
+
         ExecEnv::GetInstance()->cluster_membership_mgr()->BlacklistExecutor(
-            dest_node_exec_params->be_desc,
-            Status(Substitute("RPC to $0 failed", NetworkAddressPBToString(dest_node))));
-        break;
+            dest_node_exec_params->be_desc, retryable_status);
+
+        // Only blacklist one node per report.
+        return retryable_status;
       }
     }
   }
+  return Status::OK();
 }
 
 int64_t Coordinator::GetMaxBackendStateLagMs(TNetworkAddress* address) {
@@ -1382,4 +1415,22 @@ const TFinalizeParams* Coordinator::finalize_params() const {
 bool Coordinator::IsExecuting() {
   ExecState current_state = exec_state_.Load();
   return current_state == ExecState::EXECUTING;
+}
+
+void Coordinator::RetryQuery(const Status& status) {
+  if (AreQueryRetriesEnabled()) {
+    lock_guard<mutex> l(*parent_request_state_->lock());
+    if (CanQueryBeRetried()) {
+      parent_request_state_->RetryQuery(status);
+    }
+  }
+}
+
+bool Coordinator::AreQueryRetriesEnabled() const {
+  return schedule_.query_options().retry_failed_queries;
+}
+
+bool Coordinator::CanQueryBeRetried() const {
+  return !parent_request_state_->fetched_rows()
+      && !parent_request_state_->IsRetriedQuery() && !parent_request_state_->WasRetried();
 }

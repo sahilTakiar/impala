@@ -175,7 +175,7 @@ void ImpalaServer::fetch(Results& query_results, const QueryHandle& query_handle
   QueryHandleToTUniqueId(query_handle, &query_id);
   VLOG_ROW << "fetch(): query_id=" << PrintId(query_id) << " fetch_size=" << fetch_size;
 
-  shared_ptr<ClientRequestState> request_state = GetClientRequestState(query_id);
+  shared_ptr<ClientRequestState> request_state = GetClientFacingRequestState(query_id);
   if (UNLIKELY(request_state == nullptr)) {
     string err_msg = Substitute("Invalid query handle: $0", PrintId(query_id));
     VLOG(1) << err_msg;
@@ -185,7 +185,7 @@ void ImpalaServer::fetch(Results& query_results, const QueryHandle& query_handle
   RAISE_IF_ERROR(CheckClientRequestSession(session.get(), request_state->effective_user(),
       query_id), SQLSTATE_GENERAL_ERROR);
   Status status =
-      FetchInternal(request_state.get(), start_over, fetch_size, &query_results);
+      FetchInternal(query_id, start_over, fetch_size, &query_results);
   VLOG_ROW << "fetch result: #results=" << query_results.data.size()
            << " has_more=" << (query_results.has_more ? "true" : "false");
   if (!status.ok()) {
@@ -206,7 +206,7 @@ void ImpalaServer::get_results_metadata(ResultsMetadata& results_metadata,
   TUniqueId query_id;
   QueryHandleToTUniqueId(handle, &query_id);
   VLOG_QUERY << "get_results_metadata(): query_id=" << PrintId(query_id);
-  shared_ptr<ClientRequestState> request_state = GetClientRequestState(query_id);
+  shared_ptr<ClientRequestState> request_state = GetClientFacingRequestState(query_id);
   if (UNLIKELY(request_state.get() == nullptr)) {
     RaiseBeeswaxException(Substitute("Invalid query handle: $0", PrintId(query_id)),
       SQLSTATE_GENERAL_ERROR);
@@ -272,7 +272,7 @@ beeswax::QueryState::type ImpalaServer::get_state(const QueryHandle& handle) {
   QueryHandleToTUniqueId(handle, &query_id);
   VLOG_ROW << "get_state(): query_id=" << PrintId(query_id);
 
-  shared_ptr<ClientRequestState> request_state = GetClientRequestState(query_id);
+  shared_ptr<ClientRequestState> request_state = GetClientFacingRequestState(query_id);
   if (UNLIKELY(request_state == nullptr)) {
     VLOG_QUERY << "ImpalaServer::get_state invalid handle";
     RaiseBeeswaxException(Substitute("Invalid query handle: $0", PrintId(query_id)),
@@ -285,7 +285,9 @@ beeswax::QueryState::type ImpalaServer::get_state(const QueryHandle& handle) {
   // guaranteed to see the error query_status.
   lock_guard<mutex> l(*request_state->lock());
   beeswax::QueryState::type query_state = request_state->BeeswaxQueryState();
-  DCHECK_EQ(query_state == beeswax::QueryState::EXCEPTION,
+  DCHECK_EQ(query_state == beeswax::QueryState::EXCEPTION
+          || request_state->retry_state() == ClientRequestState::RetryState::RETRYING
+          || request_state->retry_state() == ClientRequestState::RetryState::RETRIED,
       !request_state->query_status().ok());
   return query_state;
 }
@@ -311,7 +313,7 @@ void ImpalaServer::get_log(string& log, const LogContextId& context) {
   TUniqueId query_id;
   QueryHandleToTUniqueId(handle, &query_id);
 
-  shared_ptr<ClientRequestState> request_state = GetClientRequestState(query_id);
+  shared_ptr<ClientRequestState> request_state = GetClientFacingRequestState(query_id);
   if (request_state.get() == nullptr) {
     stringstream str;
     str << "unknown query id: " << PrintId(query_id);
@@ -531,21 +533,20 @@ inline void ImpalaServer::QueryHandleToTUniqueId(const QueryHandle& handle,
   throw exc;
 }
 
-Status ImpalaServer::FetchInternal(ClientRequestState* request_state,
-    const bool start_over, const int32_t fetch_size, beeswax::Results* query_results) {
-  // Make sure ClientRequestState::Wait() has completed before fetching rows. Wait()
-  // ensures that rows are ready to be fetched (e.g., Wait() opens
-  // ClientRequestState::output_exprs_, which are evaluated in
-  // ClientRequestState::FetchRows() below).
+Status ImpalaServer::FetchInternal(TUniqueId query_id, const bool start_over,
+    const int32_t fetch_size, beeswax::Results* query_results) {
+  bool timed_out = false;
   int64_t block_on_wait_time_us = 0;
-  if (!request_state->BlockOnWait(
-          request_state->fetch_rows_timeout_us(), &block_on_wait_time_us)) {
+  shared_ptr<ClientRequestState> request_state;
+  WaitForResults(query_id, &request_state, &block_on_wait_time_us, &timed_out);
+  if (timed_out) {
     query_results->__set_ready(false);
     query_results->__set_has_more(true);
     query_results->__isset.columns = false;
     query_results->__isset.data = false;
     return Status::OK();
   }
+  DCHECK(request_state != nullptr);
 
   lock_guard<mutex> frl(*request_state->fetch_rows_lock());
   lock_guard<mutex> l(*request_state->lock());
@@ -597,7 +598,7 @@ Status ImpalaServer::FetchInternal(ClientRequestState* request_state,
 
 Status ImpalaServer::CloseInsertInternal(SessionState* session, const TUniqueId& query_id,
     TDmlResult* dml_result) {
-  shared_ptr<ClientRequestState> request_state = GetClientRequestState(query_id);
+  shared_ptr<ClientRequestState> request_state = GetClientFacingRequestState(query_id);
   if (UNLIKELY(request_state == nullptr)) {
     string err_msg = Substitute("Invalid query handle: $0", PrintId(query_id));
     VLOG(1) << err_msg;

@@ -573,7 +573,18 @@ class Coordinator { // NOLINT: The member variables could be re-ordered to save 
   /// AuxErrorInfoPB to classify specific nodes as "faulty" and then blacklists them. A
   /// node might be considered "faulty" if, for example, a RPC to that node failed, or a
   /// fragment on that node failed due to a disk IO error.
-  void UpdateBlacklistWithAuxErrorInfo(std::vector<AuxErrorInfoPB>* aux_error_info);
+  Status UpdateBlacklistWithAuxErrorInfo(std::vector<AuxErrorInfoPB>* aux_error_info,
+      const Status& status, BackendState* backend_state) WARN_UNUSED_RESULT;
+
+  /// If possible, retry the query.
+  void RetryQuery(const Status& status);
+
+  /// Returns true if query retries are enabled, false otherwise.
+  bool AreQueryRetriesEnabled() const;
+
+  /// Returns true if the query can be retried, false otherwise. Must be called while
+  /// holding the parent ClientRequestState lock_.
+  bool CanQueryBeRetried() const;
 
   /// BackendState and BackendResourceState are private to the Coordinator class, so mark
   /// all tests in CoordinatorBackendStateTest as friends.

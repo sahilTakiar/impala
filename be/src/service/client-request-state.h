@@ -73,13 +73,14 @@ enum class AdmissionOutcome;
 class ClientRequestState {
  public:
   ClientRequestState(const TQueryCtx& query_ctx, ExecEnv* exec_env, Frontend* frontend,
-      ImpalaServer* server, std::shared_ptr<ImpalaServer::SessionState> session);
+      ImpalaServer* server, std::shared_ptr<ImpalaServer::SessionState> session,
+      std::unique_ptr<TExecRequest> exec_request);
 
   ~ClientRequestState();
 
-  enum class ExecState {
-    INITIALIZED, PENDING, RUNNING, FINISHED, ERROR
-  };
+  enum class ExecState { INITIALIZED, PENDING, RUNNING, FINISHED, ERROR, UNKNOWN };
+
+  enum class RetryState { RETRYING, RETRIED, NOT_RETRIED };
 
   /// Sets the profile that is produced by the frontend. The frontend creates the
   /// profile during planning and returns it to the backend via TExecRequest,
@@ -205,7 +206,17 @@ class ClientRequestState {
   /// (TQueryCtx::TClientRequest::stmt).
   Status InitExecRequest(const TQueryCtx& query_ctx);
 
-  ImpalaServer::SessionState* session() const { return session_.get(); }
+  /// Blocks until this query has been retried. Waits until the ExecState has transitioned
+  /// to RETRIED (e.g. once MarkAsRetried() has been called). Can only be called if the
+  /// current state is either RETRIED or RETRYING. Takes lock_.
+  void WaitUntilRetried();
+
+  /// Converts the given ExecState to a string representation.
+  std::string ExecStateToString(ExecState state) const;
+
+  std::string RetryStateToString(RetryState state) const;
+
+  std::shared_ptr<ImpalaServer::SessionState> session() const { return session_; }
 
   /// Queries are run and authorized on behalf of the effective_user.
   const std::string& effective_user() const {
@@ -244,27 +255,38 @@ class ClientRequestState {
   /// Contents are only valid after InitExecRequest(TQueryCtx) initializes the
   /// TExecRequest.
   const TExecRequest& exec_request() const {
-    return exec_request_;
+    DCHECK(exec_request_ != nullptr);
+    return *exec_request_;
   }
-  TStmtType::type stmt_type() const { return exec_request_.stmt_type; }
+  TStmtType::type stmt_type() const { return exec_request_->stmt_type; }
   TCatalogOpType::type catalog_op_type() const {
-    return exec_request_.catalog_op_request.op_type;
+    return exec_request_->catalog_op_request.op_type;
   }
   TDdlType::type ddl_type() const {
-    return exec_request_.catalog_op_request.ddl_params.ddl_type;
+    return exec_request_->catalog_op_request.ddl_params.ddl_type;
   }
   boost::mutex* lock() { return &lock_; }
   boost::mutex* fetch_rows_lock() { return &fetch_rows_lock_; }
+
   /// ExecState is stored using an AtomicEnum, so reads do not require holding lock_.
   ExecState exec_state() const { return exec_state_.Load(); }
-  /// Translate exec_state_ to a TOperationState.
+
+  RetryState retry_state() const { return retry_state_.Load(); }
+
+  /// Returns the current TOperationState.
   apache::hive::service::cli::thrift::TOperationState::type TOperationState() const;
-  /// Translate exec_state_ to a beeswax::QueryState.
+
+  /// Returns the current beeswax::QueryState.
   beeswax::QueryState::type BeeswaxQueryState() const;
+
   const Status& query_status() const { return query_status_; }
   void set_result_metadata(const TResultSetMetadata& md) { result_metadata_ = md; }
   void set_user_profile_access(bool user_has_profile_access) {
     user_has_profile_access_ = user_has_profile_access;
+  }
+  void set_retried_id(std::unique_ptr<TUniqueId> retried_id) {
+    retried_id_ = move(retried_id);
+    summary_profile_->AddInfoString("Retried Query Id", PrintId(*retried_id_));
   }
   const RuntimeProfile* profile() const { return profile_; }
   const RuntimeProfile* summary_profile() const { return summary_profile_; }
@@ -278,7 +300,7 @@ class ClientRequestState {
   TUniqueId parent_query_id() const { return query_ctx_.parent_query_id; }
 
   const std::vector<std::string>& GetAnalysisWarnings() const {
-    return exec_request_.analysis_warnings;
+    return exec_request_->analysis_warnings;
   }
 
   inline int64_t last_active_ms() const {
@@ -312,6 +334,31 @@ class ClientRequestState {
 
   /// Returns the FETCH_ROWS_TIMEOUT_MS value for this query (converted to microseconds).
   int64_t fetch_rows_timeout_us() const { return fetch_rows_timeout_us_; }
+
+  /// Must be called while 'lock_' is held.
+  void RetryQuery(const Status& status);
+
+  /// Sets the ExecState to RETRIED and wakes up any threads waiting for the query to be
+  /// RETRIED. 'retried_id' is the query id of the retried query.
+  void MarkAsRetried(const TUniqueId& retried_id);
+
+  /// Returns true if this ClientRequestState was created as a retry of a previously
+  /// failed query, false otherwise.
+  bool IsRetriedQuery() const { return retried_id_ != nullptr; }
+
+  /// Returns true if this ClientRequestState has already been retried, e.g. the
+  /// RetryState is either RETRYING or RETRIED.
+  bool WasRetried() const {
+    RetryState retry_state = retry_state_.Load();
+    return retry_state == RetryState::RETRYING || retry_state == RetryState::RETRIED;
+  }
+
+  /// Can only be called if this query is the result of retrying a previously failed
+  /// query. Returns the query id of the retried query.
+  const TUniqueId& retried_id() const {
+    DCHECK(retried_id_ != nullptr);
+    return *retried_id_;
+  }
 
 protected:
   /// Updates the end_time_us_ of this query if it isn't set. The end time is determined
@@ -477,14 +524,16 @@ protected:
   /// UpdateExecState(), to ensure that the query profile is also updated.
   AtomicEnum<ExecState> exec_state_{ExecState::INITIALIZED};
 
+  /// The current RetryState of the query.
+  AtomicEnum<RetryState> retry_state_{RetryState::NOT_RETRIED};
+
   /// The current status of the query tracked by this ClientRequestState. Updated by
   /// UpdateQueryStatus(Status).
   Status query_status_;
 
   /// The TExecRequest for the query tracked by this ClientRequestState. The TExecRequest
-  /// is initialized in InitExecRequest(TQueryCtx). It should not be used until
-  /// InitExecRequest(TQueryCtx) has been called.
-  TExecRequest exec_request_;
+  /// is initialized in InitExecRequest(TQueryCtx).
+  std::unique_ptr<TExecRequest> exec_request_;
 
   /// If true, effective_user() has access to the runtime profile and execution
   /// summary.
@@ -526,6 +575,14 @@ protected:
   /// Timeout, in microseconds, when waiting for rows to become available. Derived from
   /// the query option FETCH_ROWS_TIMEOUT_MS.
   const int64_t fetch_rows_timeout_us_;
+
+  /// If this ClientRequestState was created as a retry of a previously failed query, the
+  /// retried_id_ is set to the query id of the original query that failed.
+  std::unique_ptr<const TUniqueId> retried_id_ = nullptr;
+
+  /// Condition variable used to signal the threads that are waiting until the query has
+  /// been retried.
+  ConditionVariable block_until_retried_cv_;
 
   /// Executes a local catalog operation (an operation that does not need to execute
   /// against the catalog service). Includes USE, SHOW, DESCRIBE, and EXPLAIN statements.
@@ -640,8 +697,14 @@ protected:
   /// Grabs lock_ for polling the query_status(). Hence do not call it under lock_.
   void LogQueryEvents();
 
-  /// Converts the given ExecState to a string representation.
-  std::string ExecStateToString(ExecState state) const;
-};
+  /// Converts the ExecState into an equivalent Beeswax QueryState.
+  beeswax::QueryState::type ExecStateToBeeswaxQueryState(ExecState exec_state) const;
 
+  /// Converts the ExecState into an equivalent HS2 TOperationState.
+  apache::hive::service::cli::thrift::TOperationState::type ExecStateToOperationState(
+      ExecState exec_state) const;
+
+  /// Must be called while 'lock_' is held.
+  void MarkAsRetrying(const Status& status);
+};
 }

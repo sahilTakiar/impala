@@ -143,8 +143,9 @@ void ImpalaServer::ExecuteMetadataOp(const THandleIdentifier& session_handle,
   const string& query_text = query_text_it == _TMetadataOpcode_VALUES_TO_NAMES.end() ?
       "N/A" : query_text_it->second;
   query_ctx.client_request.stmt = query_text;
+  unique_ptr<TExecRequest> exec_request = make_unique<TExecRequest>();
   request_state.reset(new ClientRequestState(query_ctx, exec_env_,
-      exec_env_->frontend(), this, session));
+      exec_env_->frontend(), this, session, move(exec_request)));
   Status register_status = RegisterQuery(session, request_state);
   if (!register_status.ok()) {
     status->__set_statusCode(thrift::TStatusCode::ERROR_STATUS);
@@ -179,21 +180,20 @@ void ImpalaServer::ExecuteMetadataOp(const THandleIdentifier& session_handle,
   status->__set_statusCode(thrift::TStatusCode::SUCCESS_STATUS);
 }
 
-Status ImpalaServer::FetchInternal(ClientRequestState* request_state,
-    SessionState* session, int32_t fetch_size, bool fetch_first,
-    TFetchResultsResp* fetch_results, int32_t* num_results) {
-  // Make sure ClientRequestState::Wait() has completed before fetching rows. Wait()
-  // ensures that rows are ready to be fetched (e.g., Wait() opens
-  // ClientRequestState::output_exprs_, which are evaluated in
-  // ClientRequestState::FetchRows() below).
+Status ImpalaServer::FetchInternal(TUniqueId query_id, SessionState* session,
+    int32_t fetch_size, bool fetch_first, TFetchResultsResp* fetch_results,
+    int32_t* num_results) {
+  bool timed_out = false;
   int64_t block_on_wait_time_us = 0;
-  if (!request_state->BlockOnWait(
-          request_state->fetch_rows_timeout_us(), &block_on_wait_time_us)) {
+  shared_ptr<ClientRequestState> request_state;
+  WaitForResults(query_id, &request_state, &block_on_wait_time_us, &timed_out);
+  if (timed_out) {
     fetch_results->status.__set_statusCode(thrift::TStatusCode::STILL_EXECUTING_STATUS);
     fetch_results->__set_hasMoreRows(true);
     fetch_results->__isset.results = false;
     return Status::OK();
   }
+  DCHECK(request_state != nullptr);
 
   lock_guard<mutex> frl(*request_state->fetch_rows_lock());
   lock_guard<mutex> l(*request_state->lock());
@@ -706,7 +706,7 @@ void ImpalaServer::GetOperationStatus(TGetOperationStatusResp& return_val,
       SQLSTATE_GENERAL_ERROR);
   VLOG_ROW << "GetOperationStatus(): query_id=" << PrintId(query_id);
 
-  shared_ptr<ClientRequestState> request_state = GetClientRequestState(query_id);
+  shared_ptr<ClientRequestState> request_state = GetClientFacingRequestState(query_id);
   if (UNLIKELY(request_state.get() == nullptr)) {
     // No handle was found
     HS2_RETURN_ERROR(return_val,
@@ -730,7 +730,11 @@ void ImpalaServer::GetOperationStatus(TGetOperationStatusResp& return_val,
       return_val.__set_errorMessage(request_state->query_status().GetDetail());
       return_val.__set_sqlState(SQLSTATE_GENERAL_ERROR);
     } else {
-      DCHECK(request_state->query_status().ok());
+      ClientRequestState::RetryState retry_state = request_state->retry_state();
+      if (retry_state != ClientRequestState::RetryState::RETRYING
+          && retry_state != ClientRequestState::RetryState::RETRIED) {
+        DCHECK(request_state->query_status().ok());
+      }
     }
   }
 }
@@ -744,7 +748,7 @@ void ImpalaServer::CancelOperation(TCancelOperationResp& return_val,
       SQLSTATE_GENERAL_ERROR);
   VLOG_QUERY << "CancelOperation(): query_id=" << PrintId(query_id);
 
-  shared_ptr<ClientRequestState> request_state = GetClientRequestState(query_id);
+  shared_ptr<ClientRequestState> request_state = GetClientFacingRequestState(query_id);
   if (UNLIKELY(request_state.get() == nullptr)) {
     // No handle was found
     HS2_RETURN_ERROR(return_val,
@@ -777,7 +781,7 @@ void ImpalaServer::CloseImpalaOperation(TCloseImpalaOperationResp& return_val,
       SQLSTATE_GENERAL_ERROR);
   VLOG_QUERY << "CloseOperation(): query_id=" << PrintId(query_id);
 
-  shared_ptr<ClientRequestState> request_state = GetClientRequestState(query_id);
+  shared_ptr<ClientRequestState> request_state = GetClientFacingRequestState(query_id);
   if (UNLIKELY(request_state.get() == nullptr)) {
     // No handle was found
     HS2_RETURN_ERROR(return_val,
@@ -811,7 +815,7 @@ void ImpalaServer::GetResultSetMetadata(TGetResultSetMetadataResp& return_val,
       SQLSTATE_GENERAL_ERROR);
   VLOG_QUERY << "GetResultSetMetadata(): query_id=" << PrintId(query_id);
 
-  shared_ptr<ClientRequestState> request_state = GetClientRequestState(query_id);
+  shared_ptr<ClientRequestState> request_state = GetClientFacingRequestState(query_id);
   if (UNLIKELY(request_state.get() == nullptr)) {
     VLOG_QUERY << "GetResultSetMetadata(): invalid query handle";
     // No handle was found
@@ -865,7 +869,7 @@ void ImpalaServer::FetchResults(TFetchResultsResp& return_val,
   VLOG_ROW << "FetchResults(): query_id=" << PrintId(query_id)
            << " fetch_size=" << request.maxRows;
 
-  shared_ptr<ClientRequestState> request_state = GetClientRequestState(query_id);
+  shared_ptr<ClientRequestState> request_state = GetClientFacingRequestState(query_id);
   if (UNLIKELY(request_state == nullptr)) {
     string err_msg = Substitute("Invalid query handle: $0", PrintId(query_id));
     VLOG(1) << err_msg;
@@ -882,7 +886,7 @@ void ImpalaServer::FetchResults(TFetchResultsResp& return_val,
       SQLSTATE_GENERAL_ERROR);
 
   int32_t num_results = 0;
-  Status status = FetchInternal(request_state.get(), session.get(), request.maxRows,
+  Status status = FetchInternal(query_id, session.get(), request.maxRows,
       fetch_first, &return_val, &num_results);
 
   VLOG_ROW << "FetchResults(): query_id=" << PrintId(query_id)
@@ -911,7 +915,7 @@ void ImpalaServer::GetLog(TGetLogResp& return_val, const TGetLogReq& request) {
       request.operationHandle.operationId, &query_id, &op_secret),
       SQLSTATE_GENERAL_ERROR);
 
-  shared_ptr<ClientRequestState> request_state = GetClientRequestState(query_id);
+  shared_ptr<ClientRequestState> request_state = GetClientFacingRequestState(query_id);
   if (UNLIKELY(request_state.get() == nullptr)) {
     // No handle was found
     HS2_RETURN_ERROR(return_val,
