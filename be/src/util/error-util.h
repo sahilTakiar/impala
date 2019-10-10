@@ -105,7 +105,13 @@ class ErrorMsg {
       const ArgType& arg8 = ArgType::kNoArg,
       const ArgType& arg9 = ArgType::kNoArg);
 
+  enum ErrorType {
+    RETRYABLE
+  };
+
   TErrorCode::type error() const { return error_; }
+
+  ErrorType type() const { return type_; }
 
   /// Add detail string message.
   void AddDetail(const std::string& d) {
@@ -120,6 +126,10 @@ class ErrorMsg {
   /// Set a specific error message.
   void SetErrorMsg(const std::string& msg) {
     message_ = msg;
+  }
+
+  void SetErrorType(ErrorType type) {
+    type_ = type;
   }
 
   /// Return the formatted error string.
@@ -139,6 +149,7 @@ private:
   TErrorCode::type error_;
   std::string message_;
   std::vector<std::string> details_;
+  ErrorType type_;
 };
 
 /// Maps the HS2 TStatusCode types to the corresponding TErrorCode.

@@ -384,7 +384,9 @@ void KrpcDataStreamSender::Channel::HandleFailedRPC(const DoRpcFn& rpc_fn,
         MonoDelta::FromMilliseconds(FLAGS_rpc_retry_interval_ms));
     return;
   }
-  MarkDone(FromKuduStatus(controller_status, prepend));
+  Status status = FromKuduStatus(controller_status, prepend);
+  status.SetIsRetryable();
+  MarkDone(status);
 }
 
 void KrpcDataStreamSender::Channel::TransmitDataCompleteCb() {
