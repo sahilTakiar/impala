@@ -44,7 +44,7 @@ error_codes = (
 
   ("INTERNAL_ERROR", 8, "$0"),
 
-  ("RECOVERABLE_ERROR", 9, "$0"),
+  ("UNUSED_9", 9, "No longer in use."),
 
   ("PARQUET_MULTIPLE_BLOCKS", 10,
    "Parquet files should not be split into multiple hdfs-blocks. file=$0"),

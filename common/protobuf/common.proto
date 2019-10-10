@@ -27,10 +27,19 @@ message NetworkAddressPB {
   required int32 port = 2;
 }
 
+// Refer to Status.thrift for documentation of StatusPropertiesPB, RPCErrorMessagePB,
+// and RetryInfoPB.
+
+message StatusPropertiesPB {
+  optional bool is_retryable = 1;
+  optional bool is_recoverable = 2;
+}
+
 // Proto-serialized version of Impala's Status object.
 message StatusPB {
   optional int32 status_code = 1;
   repeated string error_msgs = 2;
+  optional StatusPropertiesPB status_properties = 3;
 }
 
 // 128-bit ID (equivalent to TUniqueID).

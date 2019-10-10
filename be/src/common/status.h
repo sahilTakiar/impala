@@ -251,9 +251,19 @@ class NODISCARD Status {
         && msg_->error() == TErrorCode::INTERNAL_ERROR;
   }
 
+  /// Mark the error as recoverable. Clients can recover from recoverable errors and a
+  /// recoverable error will not cause the query to fail. Returns this Status.
+  Status& SetIsRecoverable() {
+    // Status::OK() cannot be marked as recoverable, so the Status must have an error
+    // message.
+    DCHECK(msg_ != NULL);
+    msg_->SetIsRecoverable();
+    return *this;
+  }
+
+  /// Returns true if the error is recoverable, false otherwise.
   bool IsRecoverableError() const {
-    return msg_ != NULL
-        && msg_->error() == TErrorCode::RECOVERABLE_ERROR;
+    return msg_ != NULL && msg_->properties().is_recoverable;
   }
 
   bool IsDiskIoError() const {
@@ -267,6 +277,22 @@ class NODISCARD Status {
           msg_->error() == TErrorCode::THREAD_POOL_TASK_TIMED_OUT);
   }
 
+  /// Mark the error as retryable. Retryable errors cause the Coordinator to
+  /// transparently retry the query (IMPALA-9124). Unlike recoverable errors, they do
+  /// cause the original query to fail. Returns this Status.
+  Status& SetIsRetryable() {
+    // Status::OK() cannot be marked as retryable, so the Status must have an error
+    // message.
+    DCHECK(msg_ != NULL);
+    msg_->SetIsRetryable();
+    return *this;
+  }
+
+  /// Returns true if the error is retryable, false otherwise.
+  bool IsRetryable() const {
+    return msg_ != NULL && msg_->properties().is_retryable;
+  }
+
   /// Returns the error message associated with a non-successful status.
   const ErrorMsg& msg() const {
     DCHECK(msg_ != NULL);
@@ -278,7 +304,8 @@ class NODISCARD Status {
 
   /// Does nothing if status.ok().
   /// Otherwise: if 'this' is an error status, adds the error msg from 'status';
-  /// otherwise assigns 'status'.
+  /// otherwise assigns 'status'. Takes the properties of 'status' and adds them
+  /// to 'this', overriding any existing values.
   void MergeStatus(const Status& status);
 
   /// Convert into TStatus. Call this if 'status_container' contains an optional TStatus

@@ -239,6 +239,19 @@ void Status::MergeStatus(const Status& status) {
   if (msg_ == NULL) {
     msg_ = new ErrorMsg(*status.msg_);
   } else {
+    // Merge the two TStatusProperties, overriding 'this' objects properties if there are
+    // any conflicts.
+    TStatusProperties properties;
+    if (status.msg().properties().__isset.is_recoverable) {
+      properties.__set_is_recoverable(status.msg().properties().is_recoverable);
+    } else {
+      properties.__set_is_recoverable(msg_->properties().is_recoverable);
+    }
+    if (status.msg().properties().__isset.is_retryable) {
+      properties.__set_is_retryable(status.msg().properties().is_retryable);
+    } else {
+      properties.__set_is_retryable(msg_->properties().is_retryable);
+    }
     msg_->AddDetail(status.msg().msg());
     for (const string& s: status.msg_->details()) msg_->AddDetail(s);
   }
@@ -254,7 +267,8 @@ void Status::ToThrift(TStatus* status) const {
     status->status_code = TErrorCode::OK;
   } else {
     status->status_code = msg_->error();
-    status->error_msgs.push_back(msg_->msg());
+    status->status_properties = msg_->properties();
+     status->error_msgs.push_back(msg_->msg());
     for (const string& s: msg_->details()) status->error_msgs.push_back(s);
     status->__isset.error_msgs = true;
   }
@@ -266,6 +280,10 @@ void Status::ToProto(StatusPB* status) const {
     status->set_status_code(TErrorCode::OK);
   } else {
     status->set_status_code(msg_->error());
+    StatusPropertiesPB* status_properties = new StatusPropertiesPB();
+    if (IsRetryable()) status_properties->set_is_retryable(true);
+    if (IsRecoverableError()) status_properties->set_is_recoverable(true);
+    status->set_allocated_status_properties(status_properties);
     status->add_error_msgs(msg_->msg());
     for (const string& s : msg_->details()) status->add_error_msgs(s);
   }
@@ -277,6 +295,9 @@ void Status::FromThrift(const TStatus& status) {
   } else {
     msg_ = new ErrorMsg();
     msg_->SetErrorCode(status.status_code);
+    if (status.__isset.status_properties) {
+      msg_->SetStatusProperties(status.status_properties);
+    }
     if (status.error_msgs.size() > 0) {
       // The first message is the actual error message. (See Status::ToThrift()).
       msg_->SetErrorMsg(status.error_msgs.front());
@@ -293,6 +314,13 @@ void Status::FromProto(const StatusPB& status) {
   } else {
     msg_ = new ErrorMsg();
     msg_->SetErrorCode(static_cast<TErrorCode::type>(status.status_code()));
+    if (status.has_status_properties()) {
+      TStatusProperties status_properties;
+      if (status.status_properties().is_retryable()) {
+        status_properties.__set_is_retryable(true);
+      }
+      msg_->SetStatusProperties(status_properties);
+    }
     if (status.error_msgs().size() > 0) {
       // The first message is the actual error message. (See Status::ToThrift()).
       msg_->SetErrorMsg(status.error_msgs().Get(0));

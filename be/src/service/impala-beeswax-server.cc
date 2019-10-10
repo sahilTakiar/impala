@@ -185,7 +185,7 @@ void ImpalaServer::fetch(Results& query_results, const QueryHandle& query_handle
   RAISE_IF_ERROR(CheckClientRequestSession(session.get(), request_state->effective_user(),
       query_id), SQLSTATE_GENERAL_ERROR);
   Status status =
-      FetchInternal(request_state.get(), start_over, fetch_size, &query_results);
+      FetchInternal(query_id, start_over, fetch_size, &query_results);
   VLOG_ROW << "fetch result: #results=" << query_results.data.size()
            << " has_more=" << (query_results.has_more ? "true" : "false");
   if (!status.ok()) {
@@ -531,20 +531,48 @@ inline void ImpalaServer::QueryHandleToTUniqueId(const QueryHandle& handle,
   throw exc;
 }
 
-Status ImpalaServer::FetchInternal(ClientRequestState* request_state,
+void ImpalaServer::BlockOnWait(std::shared_ptr<ClientRequestState>* request_state,
+    beeswax::Results* query_results, bool* timed_out, int64_t* block_on_wait_time_us) {
+  int64_t fetch_rows_timeout_us = (*request_state)->fetch_rows_timeout_us();
+  *timed_out =
+      !(*request_state)->BlockOnWait(fetch_rows_timeout_us, block_on_wait_time_us);
+  if (*timed_out) {
+    query_results->__set_ready(false);
+    query_results->__set_has_more(true);
+    query_results->__isset.columns = false;
+    query_results->__isset.data = false;
+  }
+}
+
+Status ImpalaServer::FetchInternal(TUniqueId query_id,
     const bool start_over, const int32_t fetch_size, beeswax::Results* query_results) {
   // Make sure ClientRequestState::Wait() has completed before fetching rows. Wait()
   // ensures that rows are ready to be fetched (e.g., Wait() opens
   // ClientRequestState::output_exprs_, which are evaluated in
   // ClientRequestState::FetchRows() below).
   int64_t block_on_wait_time_us = 0;
-  if (!request_state->BlockOnWait(
-          request_state->fetch_rows_timeout_us(), &block_on_wait_time_us)) {
-    query_results->__set_ready(false);
-    query_results->__set_has_more(true);
-    query_results->__isset.columns = false;
-    query_results->__isset.data = false;
-    return Status::OK();
+  shared_ptr<ClientRequestState> request_state;
+  bool timed_out = false;
+  ClientRequestState::ExecState exec_state;
+  request_state = GetClientRequestState(query_id);
+  BlockOnWait(&request_state, query_results, &timed_out, &block_on_wait_time_us);
+  if (timed_out) return Status::OK();
+
+  // After BlockOnWait returns, it is possible that the query did not time out, and that
+  // it was instead retried. In that case, wait until the query has been successfully
+  // retried and then call GetClientRequestState, which should now return the
+  // ClientRequestState for the new query.
+  exec_state = request_state->exec_state();
+  if (exec_state == ClientRequestState::ExecState::RETRYING
+      || exec_state == ClientRequestState::ExecState::RETRIED) {
+    request_state->WaitUntilRetried();
+    request_state = GetClientRequestState(query_id);
+    // Call BlockOnWait and then DCHECK that the state is not RETRYING or RETRIED
+    BlockOnWait(&request_state, query_results, &timed_out, &block_on_wait_time_us);
+    exec_state = request_state->exec_state();
+    DCHECK(exec_state != ClientRequestState::ExecState::RETRYING
+        && exec_state != ClientRequestState::ExecState::RETRIED);
+    if (timed_out) return Status::OK();
   }
 
   lock_guard<mutex> frl(*request_state->fetch_rows_lock());

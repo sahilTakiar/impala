@@ -24,7 +24,23 @@ include "ErrorCodes.thrift"
 // profiles. They should preserve backwards compatibility and as such some rules apply
 // when making changes. Please see RuntimeProfile.thrift for more details.
 
+// A struct of optional properties associated with a TStatus object. ErrorCodes specify
+// the actual error encapsulated by a TStatus object, whereas properties are additional
+// metadata used to describe properties of the TStatus object. For example, if the error
+// is retryable or not. TStatusProperties are only used internally, and are not directly
+// exposed to the client.
+struct TStatusProperties {
+  // True if the Status is retryable, false otherwise (false by default). Retryable errors
+  // cause the Coordinator to transparently retry the query (IMPALA-9124).
+  1: optional bool is_retryable = 0
+  // True if the Status is recoverable, false otherwise (false by default). Recoverable
+  // errors indicate client recoverable errors (e.g. the error is not fatal and the client
+  // can recover from the error).
+  2: optional bool is_recoverable = 0
+}
+
 struct TStatus {
   1: required ErrorCodes.TErrorCode status_code
   2: list<string> error_msgs
+  3: optional TStatusProperties status_properties
 }

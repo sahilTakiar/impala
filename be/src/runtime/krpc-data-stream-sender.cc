@@ -406,7 +406,7 @@ Status KrpcDataStreamSender::Channel::WaitForRpcLocked(std::unique_lock<SpinLock
     unique_ptr<StatusAuxInfo::RPCErrorMessage> rpc_error_msg =
         make_unique<StatusAuxInfo::RPCErrorMessage>(address_);
     parent_->state_->status_aux_info().SetRPCErrorMessage(move(rpc_error_msg));
-    return rpc_status_;
+    return rpc_status_.SetIsRetryable();
   }
   return Status::OK();
 }
@@ -449,7 +449,7 @@ void KrpcDataStreamSender::Channel::HandleFailedRPC(const DoRpcFn& rpc_fn,
   unique_ptr<StatusAuxInfo::RPCErrorMessage> rpc_error_msg =
       make_unique<StatusAuxInfo::RPCErrorMessage>(address_);
   parent_->state_->status_aux_info().SetRPCErrorMessage(move(rpc_error_msg));
-  MarkDone(FromKuduStatus(controller_status, prepend));
+  MarkDone(FromKuduStatus(controller_status, prepend).SetIsRetryable());
 }
 
 void KrpcDataStreamSender::Channel::TransmitDataCompleteCb() {

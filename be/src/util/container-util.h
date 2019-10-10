@@ -73,13 +73,22 @@ inline bool operator!=(const TNetworkAddress& lhs, const TNetworkAddress& rhs) {
   return !(lhs == rhs);
 }
 
+// TStatusProperties
+STATIC_ASSERT_SIZE(TStatusProperties, 16);
+
+inline bool operator==(const TStatusProperties& lhs, const TStatusProperties& rhs) {
+  // static_assert_size<TStatusProperties, 16>();
+  return std::tie(lhs.is_retryable, lhs.is_recoverable)
+      == std::tie(rhs.is_retryable, rhs.is_recoverable);
+}
+
 // TStatus
-STATIC_ASSERT_SIZE(TStatus, 48);
+STATIC_ASSERT_SIZE(TStatus, 64);
 
 inline bool operator==(const TStatus& lhs, const TStatus& rhs) {
   //static_assert_size<TStatus, 48>();
-  return std::tie(lhs.status_code, lhs.error_msgs)
-      == std::tie(rhs.status_code, rhs.error_msgs);
+  return std::tie(lhs.status_code, lhs.error_msgs, lhs.status_properties)
+      == std::tie(rhs.status_code, rhs.error_msgs, rhs.status_properties);
 }
 
 // TCounter

@@ -107,6 +107,8 @@ class ErrorMsg {
 
   TErrorCode::type error() const { return error_; }
 
+  const TStatusProperties& properties() const { return properties_; }
+
   /// Add detail string message.
   void AddDetail(const std::string& d) {
     details_.push_back(d);
@@ -120,6 +122,21 @@ class ErrorMsg {
   /// Set a specific error message.
   void SetErrorMsg(const std::string& msg) {
     message_ = msg;
+  }
+
+  /// Set the status properties.
+  void SetStatusProperties(TStatusProperties status_properties) {
+    properties_ = status_properties;
+  }
+
+  /// Mark the status as recoverable.
+  void SetIsRecoverable() {
+    properties_.__set_is_recoverable(true);
+  }
+
+  /// Mark the status as retryable.
+  void SetIsRetryable() {
+    properties_.__set_is_retryable(true);
   }
 
   /// Return the formatted error string.
@@ -139,6 +156,9 @@ private:
   TErrorCode::type error_;
   std::string message_;
   std::vector<std::string> details_;
+  /// The TStatusProperties for the associated Status object. Modified via methods such as
+  /// SetIsRecoverable() and SetIsRetryable().
+  TStatusProperties properties_;
 };
 
 /// Maps the HS2 TStatusCode types to the corresponding TErrorCode.
