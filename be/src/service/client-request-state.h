@@ -64,10 +64,14 @@ enum class AdmissionOutcome;
 class ClientRequestState {
  public:
   ClientRequestState(const TQueryCtx& query_ctx, ExecEnv* exec_env, Frontend* frontend,
-      ImpalaServer* server, std::shared_ptr<ImpalaServer::SessionState> session);
+      ImpalaServer* server, std::shared_ptr<ImpalaServer::SessionState> session, beeswax::Query* query);
 
   ~ClientRequestState();
 
+  enum class ExecState {
+    INITIALIZED, RUNNING, FINISHED, CANCELLED, CLOSED, ERROR, UNKNOWN, PENDING, RETRIED
+  };
+  
   /// Sets the profile that is produced by the frontend. The frontend creates the
   /// profile during planning and returns it to the backend via TExecRequest,
   /// which then sets the frontend profile.
@@ -136,8 +140,8 @@ class ClientRequestState {
   /// only for non-error states (PENDING_STATE, RUNNING_STATE and FINISHED_STATE) - if the
   /// query encounters an error the query status needs to be set with information about
   /// the error so UpdateQueryStatus() must be used instead. Takes lock_.
-  void UpdateNonErrorOperationState(
-      apache::hive::service::cli::thrift::TOperationState::type operation_state);
+  void UpdateNonErrorExecState(
+      ExecState exec_state);
 
   /// Update the query status and the "Query Status" summary profile string.
   /// If current status is already != ok, no update is made (we preserve the first error)
@@ -185,7 +189,7 @@ class ClientRequestState {
   bool GetDmlStats(TDmlResult* dml_result, Status* query_status);
 
   ImpalaServer::SessionState* session() const { return session_.get(); }
-
+  std::shared_ptr<ImpalaServer::SessionState> session_shared() const { return session_; }
   /// Queries are run and authorized on behalf of the effective_user.
   const std::string& effective_user() const {
       return GetEffectiveUser(query_ctx_.session);
@@ -198,6 +202,7 @@ class ClientRequestState {
   const std::string& default_db() const { return query_ctx_.session.database; }
   bool eos() const { return eos_; }
   const QuerySchedule* schedule() const { return schedule_.get(); }
+  beeswax::Query* query() const { return query_; }
 
   /// Returns the Coordinator for 'QUERY' and 'DML' requests once Coordinator::Exec()
   /// completes successfully. Otherwise returns null.
@@ -229,9 +234,7 @@ class ClientRequestState {
   }
   boost::mutex* lock() { return &lock_; }
   boost::mutex* fetch_rows_lock() { return &fetch_rows_lock_; }
-  apache::hive::service::cli::thrift::TOperationState::type operation_state() const {
-    return operation_state_;
-  }
+  apache::hive::service::cli::thrift::TOperationState::type operation_state() const;
   // Translate operation_state() to a beeswax::QueryState. TODO: remove calls to this
   // and replace with uses of operation_state() directly.
   beeswax::QueryState::type BeeswaxQueryState() const;
@@ -446,11 +449,12 @@ protected:
   bool is_cancelled_ = false; // if true, Cancel() was called.
   bool eos_ = false;  // if true, there are no more rows to return
 
+  // TODO should use AtomicEnum?
+  enum ExecState exec_state_ = ExecState::INITIALIZED;
+
   /// We enforce the invariant that query_status_ is not OK iff operation_state_ is
   /// ERROR_STATE, given that lock_ is held. operation_state_ should only be updated
-  /// using UpdateOperationState(), to ensure that the query profile is also updated.
-  apache::hive::service::cli::thrift::TOperationState::type operation_state_ =
-      apache::hive::service::cli::thrift::TOperationState::INITIALIZED_STATE;
+  /// using UpdateExecState(), to ensure that the query profile is also updated.
 
   Status query_status_;
   TExecRequest exec_request_;
@@ -576,9 +580,8 @@ protected:
 
   /// Update the operation state and the "Query State" summary profile string.
   /// Does not take lock_, but requires it: caller must ensure lock_
-  /// is taken before calling UpdateOperationState.
-  void UpdateOperationState(
-      apache::hive::service::cli::thrift::TOperationState::type operation_state);
+  /// is taken before calling UpdateExecState.
+  void UpdateExecState(ExecState exec_state);
 
   /// Gets the query options, their levels and the values for this client request
   /// and populates the result set with them. It covers the subset of options for
@@ -609,6 +612,7 @@ protected:
   /// Logs audit and column lineage events. Expects that Wait() has already finished.
   /// Grabs lock_ for polling the query_status(). Hence do not call it under lock_.
   void LogQueryEvents();
-};
 
+  beeswax::Query* query_;
+};
 }

@@ -70,6 +70,7 @@
 #include "service/impala-http-handler.h"
 #include "service/impala-internal-service.h"
 #include "service/client-request-state.h"
+#include "service/retry-work.h"
 #include "service/frontend.h"
 #include "util/auth-util.h"
 #include "util/bit-util.h"
@@ -178,6 +179,8 @@ DEFINE_int32(max_profile_log_files, 10, "Maximum number of profile log files to 
 
 DEFINE_int32(cancellation_thread_pool_size, 5,
     "(Advanced) Size of the thread-pool processing cancellations due to node failure");
+DEFINE_int32(retry_thread_pool_size, 5,
+    "(Advanced) Size of the thread-pool processing query retries");
 
 DEFINE_string(ssl_server_certificate, "", "The full path to the SSL certificate file used"
     " to authenticate Impala to clients. If set, both Beeswax and HiveServer2 ports will "
@@ -328,6 +331,7 @@ const string ImpalaServer::AUDIT_EVENT_LOG_FILE_PREFIX = "impala_audit_event_log
 const string LINEAGE_LOG_FILE_PREFIX = "impala_lineage_log_1.0-";
 
 const uint32_t MAX_CANCELLATION_QUEUE_SIZE = 65536;
+const uint32_t MAX_RETRY_QUEUE_SIZE = 65536;
 
 const string BEESWAX_SERVER_NAME = "beeswax-frontend";
 const string HS2_SERVER_NAME = "hiveserver2-frontend";
@@ -448,6 +452,11 @@ ImpalaServer::ImpalaServer(ExecEnv* exec_env)
       FLAGS_cancellation_thread_pool_size, MAX_CANCELLATION_QUEUE_SIZE,
       bind<void>(&ImpalaServer::CancelFromThreadPool, this, _1, _2)));
   ABORT_IF_ERROR(cancellation_thread_pool_->Init());
+
+  retry_thread_pool_.reset(new ThreadPool<RetryWork>("impala-server", "retry-worker",
+      FLAGS_retry_thread_pool_size, MAX_RETRY_QUEUE_SIZE,
+      bind<void>(&ImpalaServer::RetryQueryFromThreadPool, this, _1, _2)));
+  ABORT_IF_ERROR(retry_thread_pool_->Init());
 
   // Initialize a session expiry thread which blocks indefinitely until the first session
   // with non-zero timeout value is opened. Note that a session which doesn't specify any
@@ -875,7 +884,7 @@ void ImpalaServer::AddPoolConfiguration(TQueryCtx* ctx,
 
 Status ImpalaServer::Execute(TQueryCtx* query_ctx,
     shared_ptr<SessionState> session_state,
-    shared_ptr<ClientRequestState>* request_state) {
+    shared_ptr<ClientRequestState>* request_state, Query* query) {
   PrepareQueryContext(query_ctx);
   ScopedThreadContext debug_ctx(GetThreadDebugInfo(), query_ctx->query_id);
   ImpaladMetrics::IMPALA_SERVER_NUM_QUERIES->Increment(1L);
@@ -887,7 +896,7 @@ Status ImpalaServer::Execute(TQueryCtx* query_ctx,
 
   bool registered_request_state;
   Status status = ExecuteInternal(*query_ctx, session_state, &registered_request_state,
-      request_state);
+      request_state, query);
   if (!status.ok() && registered_request_state) {
     discard_result(UnregisterQuery((*request_state)->query_id(), false, &status));
   }
@@ -898,12 +907,12 @@ Status ImpalaServer::ExecuteInternal(
     const TQueryCtx& query_ctx,
     shared_ptr<SessionState> session_state,
     bool* registered_request_state,
-    shared_ptr<ClientRequestState>* request_state) {
+    shared_ptr<ClientRequestState>* request_state, Query* query) {
   DCHECK(session_state != nullptr);
   *registered_request_state = false;
 
   request_state->reset(new ClientRequestState(query_ctx, exec_env_, exec_env_->frontend(),
-      this, session_state));
+      this, session_state, query));
 
   (*request_state)->query_events()->MarkEvent("Query submitted");
 
@@ -1018,7 +1027,8 @@ Status ImpalaServer::RegisterQuery(shared_ptr<SessionState> session_state,
   lock_guard<mutex> l2(session_state->lock);
   // The session wasn't expired at the time it was checked out and it isn't allowed to
   // expire while checked out, so it must not be expired.
-  DCHECK(session_state->ref_count > 0 && !session_state->expired);
+  //DCHECK_GT(session_state->ref_count, 0);
+  DCHECK(!session_state->expired);
   // The session may have been closed after it was checked out.
   if (session_state->closed) {
     VLOG(1) << "RegisterQuery(): session has been closed, ignoring query.";
@@ -1054,7 +1064,7 @@ Status ImpalaServer::SetQueryInflight(shared_ptr<SessionState> session_state,
   lock_guard<mutex> l(session_state->lock);
   // The session wasn't expired at the time it was checked out and it isn't allowed to
   // expire while checked out, so it must not be expired.
-  DCHECK_GT(session_state->ref_count, 0);
+  //DCHECK_GT(session_state->ref_count, 0);
   DCHECK(!session_state->expired);
   // The session may have been closed after it was checked out.
   if (session_state->closed) {
@@ -1400,6 +1410,78 @@ TQueryOptions ImpalaServer::SessionState::QueryOptions() {
   TQueryOptions ret = *server_default_query_options;
   OverlayQueryOptions(set_query_options, set_query_options_mask, &ret);
   return ret;
+}
+
+void ImpalaServer::RetryAsync(const TUniqueId& query_id, const Status& error) {
+  retry_thread_pool_->Offer(RetryWork(query_id, error));
+}
+
+void ImpalaServer::RetryQueryFromThreadPool(
+    uint32_t thread_id, const RetryWork& retry_work) {
+  VLOG_QUERY << "Retrying query";
+  const TUniqueId& query_id = retry_work.query_id();
+  shared_ptr<ClientRequestState> request_state = GetClientRequestState(query_id);
+  // Query was already unregistered.
+  DCHECK(request_state != nullptr);  
+  Status status = UnregisterQuery(retry_work.query_id(), true, &retry_work.error());
+  DCHECK(status.ok());
+  // TODO there is a probably a bug somewhere and TQueryCtx is being copied, which is
+  // why the Coordinator version works, but not the ClientRequestState one
+  // TODO not clear if this needs to be copied
+  TQueryCtx* query_ctx = new TQueryCtx(request_state->GetCoordinator()->query_ctx());
+  status = QueryToTQueryContext(
+      *request_state->query(), query_ctx, request_state->session_id());
+  DCHECK(status.ok());
+  PrepareQueryContext(query_ctx);
+
+  // TODO not clear if this needs to be copied
+  TExecRequest retry_exec_request = request_state->exec_request();
+  shared_ptr<ClientRequestState> retry_request_state;
+  retry_request_state.reset(
+      new ClientRequestState(*query_ctx, exec_env_, exec_env_->frontend(), this,
+          request_state->session_shared(), request_state->query())); // TODO session_shared()
+
+  retry_request_state->set_user_profile_access(retry_exec_request.user_has_profile_access);
+  retry_request_state->summary_profile()->AddEventSequence(
+      retry_exec_request.timeline.name, retry_exec_request.timeline);
+  retry_request_state->SetFrontendProfile(retry_exec_request.profile);
+  if (retry_exec_request.__isset.result_set_metadata) {
+    retry_request_state->set_result_metadata(retry_exec_request.result_set_metadata);
+  }
+
+  VLOG_QUERY << "Re-registering query";
+  status = RegisterQuery(request_state->session_shared(), retry_request_state);
+  DCHECK(status.ok());
+
+  // Associate the old query_id with the new ClientRequestState so that existing
+  // QueryHandles still work
+  {
+    DCHECK_EQ(this, ExecEnv::GetInstance()->impala_server());
+    ScopedShardedMapRef<std::shared_ptr<ClientRequestState>> map_ref(
+        query_id, &client_request_state_map_);
+    DCHECK(map_ref.get() != nullptr);
+
+    auto entry = map_ref->find(query_id);
+    if (entry != map_ref->end()) {
+      // There shouldn't be an active query with that same id.
+      // (query_id is globally unique)
+      stringstream ss;
+      ss << "query id " << PrintId(query_id) << " already exists";
+      status = Status(ErrorMsg(TErrorCode::INTERNAL_ERROR, ss.str()));
+      DCHECK(status.ok());
+    }
+    map_ref->insert(make_pair(query_id, retry_request_state));
+  }
+
+  VLOG_QUERY << "Calling ClientRequestState::Exec";
+  retry_exec_request.query_exec_request.__set_query_ctx(*query_ctx);
+  status = retry_request_state->Exec(&retry_exec_request);
+  DCHECK(status.ok());
+  VLOG_QUERY << "Calling ClientRequestState::WaitAsync";
+  status = retry_request_state->WaitAsync();
+  DCHECK(status.ok());
+  status = SetQueryInflight(request_state->session_shared(), retry_request_state);
+  DCHECK(status.ok());
 }
 
 void ImpalaServer::CancelFromThreadPool(uint32_t thread_id,

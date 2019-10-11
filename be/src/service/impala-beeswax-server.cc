@@ -60,12 +60,13 @@ void ImpalaServer::query(QueryHandle& query_handle, const Query& query) {
       SQLSTATE_GENERAL_ERROR);
   TQueryCtx query_ctx;
   // raise general error for request conversion error;
-  RAISE_IF_ERROR(QueryToTQueryContext(query, &query_ctx), SQLSTATE_GENERAL_ERROR);
+  RAISE_IF_ERROR(QueryToTQueryContext(query, &query_ctx, ThriftServer::GetThreadConnectionId()), SQLSTATE_GENERAL_ERROR);
 
   // raise Syntax error or access violation; it's likely to be syntax/analysis error
   // TODO: that may not be true; fix this
   shared_ptr<ClientRequestState> request_state;
-  RAISE_IF_ERROR(Execute(&query_ctx, session, &request_state),
+  Query* query_ = new Query(query);
+  RAISE_IF_ERROR(Execute(&query_ctx, session, &request_state, query_),
       SQLSTATE_SYNTAX_ERROR_OR_ACCESS_VIOLATION);
 
   // start thread to wait for results to become available, which will allow
@@ -96,7 +97,7 @@ void ImpalaServer::executeAndWait(QueryHandle& query_handle, const Query& query,
       SQLSTATE_GENERAL_ERROR);
   TQueryCtx query_ctx;
   // raise general error for request conversion error;
-  RAISE_IF_ERROR(QueryToTQueryContext(query, &query_ctx), SQLSTATE_GENERAL_ERROR);
+  RAISE_IF_ERROR(QueryToTQueryContext(query, &query_ctx, ThriftServer::GetThreadConnectionId()), SQLSTATE_GENERAL_ERROR);
 
   shared_ptr<ClientRequestState> request_state;
   DCHECK(session != nullptr);  // The session should exist.
@@ -148,7 +149,7 @@ void ImpalaServer::explain(QueryExplanation& query_explanation, const Query& que
       SQLSTATE_GENERAL_ERROR);
 
   TQueryCtx query_ctx;
-  RAISE_IF_ERROR(QueryToTQueryContext(query, &query_ctx), SQLSTATE_GENERAL_ERROR);
+  RAISE_IF_ERROR(QueryToTQueryContext(query, &query_ctx, ThriftServer::GetThreadConnectionId()), SQLSTATE_GENERAL_ERROR);
 
   RAISE_IF_ERROR(
       exec_env_->frontend()->GetExplainPlan(query_ctx, &query_explanation.textual),
@@ -270,7 +271,6 @@ beeswax::QueryState::type ImpalaServer::get_state(const QueryHandle& handle) {
       ThriftServer::GetThreadConnectionId(), &session), SQLSTATE_GENERAL_ERROR);
   TUniqueId query_id;
   QueryHandleToTUniqueId(handle, &query_id);
-  VLOG_ROW << "get_state(): query_id=" << PrintId(query_id);
 
   shared_ptr<ClientRequestState> request_state = GetClientRequestState(query_id);
   if (UNLIKELY(request_state == nullptr)) {
@@ -287,6 +287,7 @@ beeswax::QueryState::type ImpalaServer::get_state(const QueryHandle& handle) {
   beeswax::QueryState::type query_state = request_state->BeeswaxQueryState();
   DCHECK_EQ(query_state == beeswax::QueryState::EXCEPTION,
       !request_state->query_status().ok());
+  VLOG_ROW << "get_state(): query_id=" << PrintId(query_id) << " state = " << query_state;
   return query_state;
 }
 
@@ -467,15 +468,15 @@ void ImpalaServer::ResetTable(impala::TStatus& status, const TResetTableReq& req
 }
 
 Status ImpalaServer::QueryToTQueryContext(const Query& query,
-    TQueryCtx* query_ctx) {
+    TQueryCtx* query_ctx, const TUniqueId& session_id) {
   query_ctx->client_request.stmt = query.query;
   VLOG_QUERY << "query: " << ThriftDebugString(query);
   QueryOptionsMask set_query_options_mask;
   {
     shared_ptr<SessionState> session;
-    const TUniqueId& session_id = ThriftServer::GetThreadConnectionId();
     // OK to skip secret validation since 'session_id' comes from connection
     // and is trusted.
+    VLOG_QUERY << "session_id = " << session_id;
     RETURN_IF_ERROR(GetSessionState(session_id, SecretArg::SkipSecretCheck(), &session,
         /* mark_active= */ false));
     DCHECK(session != nullptr);

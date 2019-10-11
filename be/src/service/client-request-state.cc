@@ -89,7 +89,7 @@ static const string TABLES_WITH_MISSING_DISK_IDS_KEY = "Tables With Missing Disk
 
 ClientRequestState::ClientRequestState(
     const TQueryCtx& query_ctx, ExecEnv* exec_env, Frontend* frontend,
-    ImpalaServer* server, shared_ptr<ImpalaServer::SessionState> session)
+    ImpalaServer* server, shared_ptr<ImpalaServer::SessionState> session, beeswax::Query* query)
   : query_ctx_(query_ctx),
     last_active_time_ms_(numeric_limits<int64_t>::max()),
     child_query_executor_(new ChildQueryExecutor),
@@ -104,7 +104,8 @@ ClientRequestState::ClientRequestState(
     frontend_(frontend),
     parent_server_(server),
     start_time_us_(UnixMicros()),
-    fetch_rows_timeout_us_(MICROS_PER_MILLI * query_options().fetch_rows_timeout_ms) {
+    fetch_rows_timeout_us_(MICROS_PER_MILLI * query_options().fetch_rows_timeout_ms),
+    query_(query) {
 #ifndef NDEBUG
   profile_->AddInfoString("DEBUG MODE WARNING", "Query profile created while running a "
       "DEBUG build of Impala. Use RELEASE builds to measure query performance.");
@@ -276,9 +277,9 @@ Status ClientRequestState::Exec(TExecRequest* exec_request) {
   }
 
   if (async_exec_thread_.get() != nullptr) {
-    UpdateNonErrorOperationState(TOperationState::PENDING_STATE);
+    UpdateNonErrorExecState(ExecState::PENDING);
   } else {
-    UpdateNonErrorOperationState(TOperationState::RUNNING_STATE);
+    UpdateNonErrorExecState(ExecState::RUNNING);
   }
   return Status::OK();
 }
@@ -560,7 +561,7 @@ void ClientRequestState::FinishExecQueryOrDmlRequest() {
   }
 
   profile_->AddChild(coord_->query_profile());
-  UpdateNonErrorOperationState(TOperationState::RUNNING_STATE);
+  UpdateNonErrorExecState(ExecState::RUNNING);
 }
 
 Status ClientRequestState::ExecDdlRequest() {
@@ -826,11 +827,11 @@ void ClientRequestState::Wait() {
     if (stmt_type() == TStmtType::DDL) {
       DCHECK(catalog_op_type() != TCatalogOpType::DDL || request_result_set_ != nullptr);
     }
-    UpdateNonErrorOperationState(TOperationState::FINISHED_STATE);
+    UpdateNonErrorExecState(ExecState::FINISHED);
   }
-  // UpdateQueryStatus() or UpdateNonErrorOperationState() have updated operation_state_.
-  DCHECK(operation_state_ == TOperationState::FINISHED_STATE ||
-      operation_state_ == TOperationState::ERROR_STATE);
+  // UpdateQueryStatus() or UpdateNonErrorExecState() have updated exec_state_.
+  DCHECK(exec_state_ == ExecState::FINISHED ||
+      exec_state_ == ExecState::ERROR || exec_state_ == ExecState::RETRIED);
   // Notify all the threads blocked on Wait() to finish and then log the query events,
   // if any.
   {
@@ -918,33 +919,40 @@ Status ClientRequestState::RestartFetch() {
   return Status::OK();
 }
 
-void ClientRequestState::UpdateNonErrorOperationState(TOperationState::type new_state) {
+void ClientRequestState::UpdateNonErrorExecState(ExecState new_state) {
   lock_guard<mutex> l(lock_);
+  // TODO we probably don't need most of these states
   switch (new_state) {
-    case TOperationState::PENDING_STATE:
-      if (operation_state_ == TOperationState::INITIALIZED_STATE) {
-        UpdateOperationState(new_state);
+    case ExecState::PENDING:
+      if (exec_state_ == ExecState::INITIALIZED) {
+        UpdateExecState(new_state);
       }
       break;
-    case TOperationState::RUNNING_STATE:
-    case TOperationState::FINISHED_STATE:
-      if (operation_state_ == TOperationState::INITIALIZED_STATE
-          || operation_state_ == TOperationState::PENDING_STATE
-          || operation_state_ == TOperationState::RUNNING_STATE) {
-        UpdateOperationState(new_state);
+    case ExecState::RUNNING:
+    case ExecState::FINISHED:
+      if (exec_state_ == ExecState::INITIALIZED
+          || exec_state_ == ExecState::PENDING
+          || exec_state_ == ExecState::RUNNING) {
+        UpdateExecState(new_state);
       }
       break;
     default:
-      DCHECK(false) << "A non-error state expected but got: " << new_state;
+      DCHECK(false); //<< "A non-error state expected but got: " << new_state;
   }
 }
 
 Status ClientRequestState::UpdateQueryStatus(const Status& status) {
   // Preserve the first non-ok status
   if (!status.ok() && query_status_.ok()) {
-    UpdateOperationState(TOperationState::ERROR_STATE);
-    query_status_ = status;
-    summary_profile_->AddInfoStringRedacted("Query Status", query_status_.GetDetail());
+    if (status.IsRetryableError() && exec_state_ != ExecState::RETRIED) {
+      VLOG_QUERY << "Scheduling async retry " << GetStackTrace();
+      parent_server_->RetryAsync(query_id(), status);
+      UpdateExecState(ExecState::RETRIED);
+    } else {
+      UpdateExecState(ExecState::ERROR);
+      query_status_ = status;
+      summary_profile_->AddInfoStringRedacted("Query Status", query_status_.GetDetail());
+    }
   }
 
   return status;
@@ -954,7 +962,7 @@ Status ClientRequestState::FetchRowsInternal(const int32_t max_rows,
     QueryResultSet* fetched_rows, int64_t block_on_wait_time_us) {
   // Wait() guarantees that we've transitioned at least to FINISHED_STATE (and any
   // state beyond that should have a non-OK query_status_ set).
-  DCHECK(operation_state_ == TOperationState::FINISHED_STATE);
+  DCHECK(exec_state_ == ExecState::FINISHED);
 
   if (eos_) return Status::OK();
 
@@ -1090,12 +1098,12 @@ Status ClientRequestState::Cancel(bool check_inflight, const Status* cause) {
   {
     lock_guard<mutex> lock(lock_);
     // If the query has reached a terminal state, no need to update the state.
-    bool already_done = eos_ || operation_state_ == TOperationState::ERROR_STATE;
+    bool already_done = eos_ || exec_state_ == ExecState::ERROR;
     if (!already_done && cause != NULL) {
       DCHECK(!cause->ok());
       discard_result(UpdateQueryStatus(*cause));
       query_events_->MarkEvent("Cancelled");
-      DCHECK_EQ(operation_state_, TOperationState::ERROR_STATE);
+      DCHECK(exec_state_ == ExecState::ERROR || exec_state_ == ExecState::RETRIED);
     }
 
     admit_outcome_.Set(AdmissionOutcome::CANCELLED);
@@ -1336,22 +1344,36 @@ void ClientRequestState::ClearResultCache() {
   result_cache_.reset();
 }
 
-void ClientRequestState::UpdateOperationState(
-    TOperationState::type operation_state) {
-  operation_state_ = operation_state;
+void ClientRequestState::UpdateExecState(ExecState exec_state) {
+  exec_state_ = exec_state;
   summary_profile_->AddInfoString("Query State", PrintThriftEnum(BeeswaxQueryState()));
 }
 
 beeswax::QueryState::type ClientRequestState::BeeswaxQueryState() const {
-  switch (operation_state_) {
-    case TOperationState::INITIALIZED_STATE: return beeswax::QueryState::CREATED;
-    case TOperationState::PENDING_STATE: return beeswax::QueryState::COMPILED;
-    case TOperationState::RUNNING_STATE: return beeswax::QueryState::RUNNING;
-    case TOperationState::FINISHED_STATE: return beeswax::QueryState::FINISHED;
-    case TOperationState::ERROR_STATE: return beeswax::QueryState::EXCEPTION;
+  switch (exec_state_) {
+    case ExecState::INITIALIZED: return beeswax::QueryState::CREATED;
+    case ExecState::PENDING: return beeswax::QueryState::COMPILED;
+    case ExecState::RUNNING: return beeswax::QueryState::RUNNING;
+    case ExecState::FINISHED: return beeswax::QueryState::FINISHED;
+    case ExecState::ERROR: return beeswax::QueryState::EXCEPTION;
+    case ExecState::RETRIED: return beeswax::QueryState::RUNNING;
     default: {
       DCHECK(false) << "Add explicit translation for all used TOperationState values";
       return beeswax::QueryState::EXCEPTION;
+    }
+  }
+}
+
+TOperationState::type ClientRequestState::operation_state() const {
+ switch (exec_state_) {
+    case ExecState::INITIALIZED: return TOperationState::INITIALIZED_STATE;
+    case ExecState::PENDING: return TOperationState::PENDING_STATE;
+    case ExecState::RUNNING: return TOperationState::RUNNING_STATE;
+    case ExecState::FINISHED: return TOperationState::FINISHED_STATE;
+    case ExecState::ERROR: return TOperationState::ERROR_STATE;
+    default: {
+      DCHECK(false) << "Add explicit translation for all used TOperationState values";
+      return TOperationState::ERROR_STATE;
     }
   }
 }

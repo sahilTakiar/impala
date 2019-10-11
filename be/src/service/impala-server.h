@@ -56,6 +56,7 @@ class ExecEnv;
 class DataSink;
 class CancellationWork;
 class ImpalaHttpHandler;
+class RetryWork;
 class RowDescriptor;
 class TCatalogUpdate;
 class TPlanExecRequest;
@@ -338,6 +339,8 @@ class ImpalaServer : public ImpalaServiceIf,
   /// operation.
   virtual void CloseImpalaOperation(
       TCloseImpalaOperationResp& return_val, const TCloseImpalaOperationReq& request);
+
+  void RetryAsync(const TUniqueId& query_id, const Status& error);
 
   /// ImpalaInternalService rpcs
   void UpdateFilter(TUpdateFilterResult& return_val, const TUpdateFilterParams& params);
@@ -663,12 +666,12 @@ class ImpalaServer : public ImpalaServiceIf,
   /// session_state is a ptr to the session running this query and must have been checked
   /// out.
   Status Execute(TQueryCtx* query_ctx, std::shared_ptr<SessionState> session_state,
-      std::shared_ptr<ClientRequestState>* exec_state) WARN_UNUSED_RESULT;
+      std::shared_ptr<ClientRequestState>* exec_state, beeswax::Query* query = nullptr) WARN_UNUSED_RESULT;
 
   /// Implements Execute() logic, but doesn't unregister query on error.
   Status ExecuteInternal(const TQueryCtx& query_ctx,
       std::shared_ptr<SessionState> session_state, bool* registered_exec_state,
-      std::shared_ptr<ClientRequestState>* exec_state) WARN_UNUSED_RESULT;
+      std::shared_ptr<ClientRequestState>* exec_state, beeswax::Query* query) WARN_UNUSED_RESULT;
 
   /// Registers the query exec state with client_request_state_map_ using the
   /// globally unique query_id.
@@ -895,7 +898,7 @@ class ImpalaServer : public ImpalaServiceIf,
   /// Beeswax private methods
 
   /// Helper functions to translate between Beeswax and Impala structs
-  Status QueryToTQueryContext(const beeswax::Query& query, TQueryCtx* query_ctx)
+  Status QueryToTQueryContext(const beeswax::Query& query, TQueryCtx* query_ctx, const TUniqueId& session_id)
       WARN_UNUSED_RESULT;
   void TUniqueIdToQueryHandle(const TUniqueId& query_id, beeswax::QueryHandle* handle);
   void QueryHandleToTUniqueId(const beeswax::QueryHandle& handle, TUniqueId* query_id);
@@ -956,6 +959,8 @@ class ImpalaServer : public ImpalaServiceIf,
   /// CancelInternal directly, but has a signature compatible with the thread pool.
   void CancelFromThreadPool(uint32_t thread_id,
       const CancellationWork& cancellation_work);
+
+  void RetryQueryFromThreadPool(uint32_t thread_id, const RetryWork& retry_work);
 
   /// Helper method to add the pool name and query options to the query_ctx. Must be
   /// called before ExecuteInternal() at which point the TQueryCtx is const and cannot
@@ -1055,6 +1060,8 @@ class ImpalaServer : public ImpalaServiceIf,
   /// Thread pool to process cancellation requests that come from failed Impala demons to
   /// avoid blocking the statestore callback.
   boost::scoped_ptr<ThreadPool<CancellationWork>> cancellation_thread_pool_;
+
+  boost::scoped_ptr<ThreadPool<RetryWork>> retry_thread_pool_;
 
   /// Thread that runs SessionMaintenance. It will wake up periodically to check for
   /// sessions which are idle for more their timeout values.

@@ -143,8 +143,8 @@ void ImpalaServer::ExecuteMetadataOp(const THandleIdentifier& session_handle,
   const string& query_text = query_text_it == _TMetadataOpcode_VALUES_TO_NAMES.end() ?
       "N/A" : query_text_it->second;
   query_ctx.client_request.stmt = query_text;
-  request_state.reset(new ClientRequestState(query_ctx, exec_env_,
-      exec_env_->frontend(), this, session));
+  //request_state.reset(new ClientRequestState(query_ctx, exec_env_,
+  //    exec_env_->frontend(), this, session));
   Status register_status = RegisterQuery(session, request_state);
   if (!register_status.ok()) {
     status->__set_statusCode(thrift::TStatusCode::ERROR_STATUS);
@@ -162,7 +162,7 @@ void ImpalaServer::ExecuteMetadataOp(const THandleIdentifier& session_handle,
     return;
   }
 
-  request_state->UpdateNonErrorOperationState(TOperationState::FINISHED_STATE);
+  request_state->UpdateNonErrorExecState(ClientRequestState::ExecState::FINISHED);
 
   Status inflight_status = SetQueryInflight(session, request_state);
   if (!inflight_status.ok()) {
