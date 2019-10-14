@@ -1308,6 +1308,8 @@ Status ImpalaServer::GetSessionState(const TUniqueId& session_id, const SecretAr
   // This would require rethinking the locking protocol for 'session_state_map_lock_' -
   // it probably doesn't not need to be held for the full duration of this function.
   if (i == session_state_map_.end() || !secret.Validate(i->second->secret)) {
+    if (i == session_state_map_.end()) VLOG_QUERY << "i == session_state_map_.end()";
+    //VLOG_QUERY << "i == session_state_map_.end() " << (i == session_state_map_.end()) << " !secret.Validate(i->second->secret) " << (!secret.Validate(i->second->secret));
     if (i != session_state_map_.end()) {
       // Log invalid attempts to connect. Be careful not to log secret.
       VLOG(1) << "Client tried to connect to session " << PrintId(session_id)
@@ -1315,10 +1317,11 @@ Status ImpalaServer::GetSessionState(const TUniqueId& session_id, const SecretAr
               << (secret.is_session_secret() ? "session" : "operation") << " secret.";
     }
     *session_state = std::shared_ptr<SessionState>();
+    // TODO maybe the secrete validation was messed up?
     string err_msg = secret.is_session_secret() ?
         Substitute("Invalid session id: $0", PrintId(session_id)) :
         Substitute(LEGACY_INVALID_QUERY_HANDLE_TEMPLATE, PrintId(secret.query_id()));
-    VLOG(1) << "GetSessionState(): " << err_msg;
+    VLOG(1) << "GetSessionState(): " << err_msg << GetStackTrace();
     return Status::Expected(err_msg);
   } else {
     if (mark_active) {
@@ -1422,17 +1425,24 @@ void ImpalaServer::RetryQueryFromThreadPool(
   const TUniqueId& query_id = retry_work.query_id();
   shared_ptr<ClientRequestState> request_state = GetClientRequestState(query_id);
   // Query was already unregistered.
-  DCHECK(request_state != nullptr);  
+  DCHECK(request_state != nullptr);
+  // Need to lock here because UnregisterQuery removes the ClientRequestState from the map
+  // so any attempts to call beeswax methods will fail becaus the state won't be in the
+  // map.
+  lock_guard<mutex> l(retry_lock_); 
   Status status = UnregisterQuery(retry_work.query_id(), true, &retry_work.error());
-  DCHECK(status.ok());
+  DCHECK(status.ok()) << status.GetDetail();
+  VLOG_QUERY << "Unregistered query";
   // TODO there is a probably a bug somewhere and TQueryCtx is being copied, which is
   // why the Coordinator version works, but not the ClientRequestState one
   // TODO not clear if this needs to be copied
+  VLOG_QUERY << "Preparing query context";
   TQueryCtx* query_ctx = new TQueryCtx(request_state->GetCoordinator()->query_ctx());
   status = QueryToTQueryContext(
       *request_state->query(), query_ctx, request_state->session_id());
-  DCHECK(status.ok());
+  DCHECK(status.ok()) << status.GetDetail();
   PrepareQueryContext(query_ctx);
+  VLOG_QUERY << "Prepared query context";
 
   // TODO not clear if this needs to be copied
   TExecRequest retry_exec_request = request_state->exec_request();
@@ -1451,7 +1461,7 @@ void ImpalaServer::RetryQueryFromThreadPool(
 
   VLOG_QUERY << "Re-registering query";
   status = RegisterQuery(request_state->session_shared(), retry_request_state);
-  DCHECK(status.ok());
+  DCHECK(status.ok()) << status.GetDetail();
 
   // Associate the old query_id with the new ClientRequestState so that existing
   // QueryHandles still work
@@ -1468,7 +1478,7 @@ void ImpalaServer::RetryQueryFromThreadPool(
       stringstream ss;
       ss << "query id " << PrintId(query_id) << " already exists";
       status = Status(ErrorMsg(TErrorCode::INTERNAL_ERROR, ss.str()));
-      DCHECK(status.ok());
+      DCHECK(status.ok()) << status.GetDetail();
     }
     map_ref->insert(make_pair(query_id, retry_request_state));
   }
@@ -1476,12 +1486,12 @@ void ImpalaServer::RetryQueryFromThreadPool(
   VLOG_QUERY << "Calling ClientRequestState::Exec";
   retry_exec_request.query_exec_request.__set_query_ctx(*query_ctx);
   status = retry_request_state->Exec(&retry_exec_request);
-  DCHECK(status.ok());
+  DCHECK(status.ok()) << status.GetDetail();
   VLOG_QUERY << "Calling ClientRequestState::WaitAsync";
   status = retry_request_state->WaitAsync();
   DCHECK(status.ok());
   status = SetQueryInflight(request_state->session_shared(), retry_request_state);
-  DCHECK(status.ok());
+  DCHECK(status.ok()) << status.GetDetail();
 }
 
 void ImpalaServer::CancelFromThreadPool(uint32_t thread_id,
@@ -1537,11 +1547,12 @@ void ImpalaServer::CancelFromThreadPool(uint32_t thread_id,
     }
   } else {
     VLOG_QUERY << "CancelFromThreadPool(): cancelling query_id=" << PrintId(query_id);
-    Status status = request_state->Cancel(true, &error);
-    if (!status.ok()) {
-      VLOG_QUERY << "Query cancellation (" << PrintId(cancellation_work.query_id())
-                 << ") did not succeed: " << status.GetDetail();
-    }
+    //Status status = request_state->Cancel(true, &error);
+    VLOG_QUERY << "Cancel thread pool is submitting a retry";
+    //RetryAsync(query_id, error);
+    // TODO add in the call to RetryAsync, but need to make sure only one call to
+    // RetryAsync for the query is created; for a single query, typically the Coordinator /
+    // node blacklist will notice the failure + the ClusterMembershipMgr
   }
 }
 

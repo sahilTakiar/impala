@@ -827,6 +827,7 @@ void ClientRequestState::Wait() {
     if (stmt_type() == TStmtType::DDL) {
       DCHECK(catalog_op_type() != TCatalogOpType::DDL || request_result_set_ != nullptr);
     }
+    VLOG_QUERY << "Setting status to FINISHED " << GetStackTrace();
     UpdateNonErrorExecState(ExecState::FINISHED);
   }
   // UpdateQueryStatus() or UpdateNonErrorExecState() have updated exec_state_.
@@ -945,10 +946,11 @@ Status ClientRequestState::UpdateQueryStatus(const Status& status) {
   // Preserve the first non-ok status
   if (!status.ok() && query_status_.ok()) {
     if (status.IsRetryableError() && exec_state_ != ExecState::RETRIED) {
-      VLOG_QUERY << "Scheduling async retry " << GetStackTrace();
+      VLOG_QUERY << "Scheduling async retry ";
       parent_server_->RetryAsync(query_id(), status);
       UpdateExecState(ExecState::RETRIED);
     } else {
+      VLOG_QUERY << "Setting to error non-retryable error " << status.GetDetail();
       UpdateExecState(ExecState::ERROR);
       query_status_ = status;
       summary_profile_->AddInfoStringRedacted("Query Status", query_status_.GetDetail());

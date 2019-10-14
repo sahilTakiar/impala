@@ -174,9 +174,13 @@ void ImpalaServer::fetch(Results& query_results, const QueryHandle& query_handle
 
   TUniqueId query_id;
   QueryHandleToTUniqueId(query_handle, &query_id);
-  VLOG_ROW << "fetch(): query_id=" << PrintId(query_id) << " fetch_size=" << fetch_size;
-
-  shared_ptr<ClientRequestState> request_state = GetClientRequestState(query_id);
+  VLOG_QUERY << "fetch(): query_id=" << PrintId(query_id) << " fetch_size=" << fetch_size;
+ 
+  shared_ptr<ClientRequestState> request_state;
+  {
+    lock_guard<mutex> l(retry_lock_);
+    request_state = GetClientRequestState(query_id);
+  }
   if (UNLIKELY(request_state == nullptr)) {
     string err_msg = Substitute("Invalid query handle: $0", PrintId(query_id));
     VLOG(1) << err_msg;
@@ -207,7 +211,11 @@ void ImpalaServer::get_results_metadata(ResultsMetadata& results_metadata,
   TUniqueId query_id;
   QueryHandleToTUniqueId(handle, &query_id);
   VLOG_QUERY << "get_results_metadata(): query_id=" << PrintId(query_id);
-  shared_ptr<ClientRequestState> request_state = GetClientRequestState(query_id);
+  shared_ptr<ClientRequestState> request_state;
+  {
+    lock_guard<mutex> l(retry_lock_);
+    request_state = GetClientRequestState(query_id);
+  }
   if (UNLIKELY(request_state.get() == nullptr)) {
     RaiseBeeswaxException(Substitute("Invalid query handle: $0", PrintId(query_id)),
       SQLSTATE_GENERAL_ERROR);
@@ -271,8 +279,11 @@ beeswax::QueryState::type ImpalaServer::get_state(const QueryHandle& handle) {
       ThriftServer::GetThreadConnectionId(), &session), SQLSTATE_GENERAL_ERROR);
   TUniqueId query_id;
   QueryHandleToTUniqueId(handle, &query_id);
-
-  shared_ptr<ClientRequestState> request_state = GetClientRequestState(query_id);
+  shared_ptr<ClientRequestState> request_state;
+  {
+    lock_guard<mutex> l(retry_lock_);
+    request_state = GetClientRequestState(query_id);
+  }
   if (UNLIKELY(request_state == nullptr)) {
     VLOG_QUERY << "ImpalaServer::get_state invalid handle";
     RaiseBeeswaxException(Substitute("Invalid query handle: $0", PrintId(query_id)),
@@ -287,7 +298,7 @@ beeswax::QueryState::type ImpalaServer::get_state(const QueryHandle& handle) {
   beeswax::QueryState::type query_state = request_state->BeeswaxQueryState();
   DCHECK_EQ(query_state == beeswax::QueryState::EXCEPTION,
       !request_state->query_status().ok());
-  VLOG_ROW << "get_state(): query_id=" << PrintId(query_id) << " state = " << query_state;
+  VLOG_QUERY << "get_state(): query_id=" << PrintId(query_id) << " state = " << query_state;
   return query_state;
 }
 
@@ -311,8 +322,11 @@ void ImpalaServer::get_log(string& log, const LogContextId& context) {
   handle.__set_id(context);
   TUniqueId query_id;
   QueryHandleToTUniqueId(handle, &query_id);
-
-  shared_ptr<ClientRequestState> request_state = GetClientRequestState(query_id);
+  shared_ptr<ClientRequestState> request_state;
+  {
+    lock_guard<mutex> l(retry_lock_);
+    request_state = GetClientRequestState(query_id);
+  }
   if (request_state.get() == nullptr) {
     stringstream str;
     str << "unknown query id: " << PrintId(query_id);
@@ -539,6 +553,18 @@ Status ImpalaServer::FetchInternal(ClientRequestState* request_state,
   // ClientRequestState::output_exprs_, which are evaluated in
   // ClientRequestState::FetchRows() below).
   int64_t block_on_wait_time_us = 0;
+  // TODO need some special handling here; what happens if fetch is called on a running
+  // query that then fails and is retried? the fetch request will block here, and
+  // eventually return and then fail; instead it should restart the fetch
+  // TODO this is potentially the major flaw with this approach, if everything was
+  // encapsulated within the ClientRequestState, this would be easier, because you can
+  // just use the same ClientRequesState, but now you need to switch it out magically
+  // Could use an AtomicPtr to fix this issue, even encapsulating this in CRS does not
+  // solve all the issues, if you make it this far into fetch, how do you force it to
+  // restart?
+  // TODO I think this is technically incorrect anyway, it should wait until it is FINISHED
+  // I don't think BlockOnWait returning guaranttes that is ready to fetch rows because the
+  // query could have failed and this would still return successfully 
   if (!request_state->BlockOnWait(
           request_state->fetch_rows_timeout_us(), &block_on_wait_time_us)) {
     query_results->__set_ready(false);
@@ -598,7 +624,11 @@ Status ImpalaServer::FetchInternal(ClientRequestState* request_state,
 
 Status ImpalaServer::CloseInsertInternal(SessionState* session, const TUniqueId& query_id,
     TDmlResult* dml_result) {
-  shared_ptr<ClientRequestState> request_state = GetClientRequestState(query_id);
+  shared_ptr<ClientRequestState> request_state;
+  {
+    lock_guard<mutex> l(retry_lock_);
+    request_state = GetClientRequestState(query_id);
+  }
   if (UNLIKELY(request_state == nullptr)) {
     string err_msg = Substitute("Invalid query handle: $0", PrintId(query_id));
     VLOG(1) << err_msg;

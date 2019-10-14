@@ -41,6 +41,30 @@ from tests.hs2.hs2_test_suite import HS2TestSuite, needs_session
 LOG = logging.getLogger(__name__)
 
 
+from random import randint
+from time import sleep
+
+class TestQueryRetry(CustomClusterTestSuite):
+  @classmethod
+  def get_workload(cls):
+    return 'functional-query'
+
+  @pytest.mark.execute_serially
+  def test_query_retry(self, cursor):
+    query = None
+    with open('/tmp/query4.txt', 'r') as tpcds_query4:
+      query = tpcds_query4.read()
+    assert self.execute_query("use tpcds_parquet").success
+    handle = self.execute_query_async(query)
+    self.wait_for_state(handle, self.client.QUERY_STATES['RUNNING'], 60)
+    sleep(randint(0,10))
+    self.cluster.impalads[2].kill()
+    self.wait_for_state(handle, self.client.QUERY_STATES['FINISHED'], 60)
+    results = self.client.fetch(query, handle)
+    assert results.success
+    assert len(results.data) == 8
+
+
 class TestRestart(CustomClusterTestSuite):
   @classmethod
   def get_workload(cls):

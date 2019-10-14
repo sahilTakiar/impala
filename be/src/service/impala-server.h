@@ -1025,6 +1025,8 @@ class ImpalaServer : public ImpalaServiceIf,
   /// Guards query_log_ and query_log_index_
   boost::mutex query_log_lock_;
 
+  boost::mutex retry_lock_;
+
   /// FIFO list of query records, which are written after the query finishes executing
   typedef std::list<QueryStateRecord> QueryLog;
   QueryLog query_log_;
