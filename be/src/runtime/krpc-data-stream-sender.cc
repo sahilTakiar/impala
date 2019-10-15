@@ -344,6 +344,7 @@ Status KrpcDataStreamSender::Channel::WaitForRpc(std::unique_lock<SpinLock>* loc
     LOG(ERROR) << "channel send to " << TNetworkAddressToString(address_) << " failed: "
                << "(fragment_instance_id=" << PrintId(fragment_instance_id_) << "): "
                << rpc_status_.GetDetail();
+    rpc_status_.SetIsRetryable();
     return rpc_status_;
   }
   return Status::OK();

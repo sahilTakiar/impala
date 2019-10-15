@@ -1549,10 +1549,12 @@ void ImpalaServer::CancelFromThreadPool(uint32_t thread_id,
     VLOG_QUERY << "CancelFromThreadPool(): cancelling query_id=" << PrintId(query_id);
     //Status status = request_state->Cancel(true, &error);
     VLOG_QUERY << "Cancel thread pool is submitting a retry";
-    //RetryAsync(query_id, error);
-    // TODO add in the call to RetryAsync, but need to make sure only one call to
-    // RetryAsync for the query is created; for a single query, typically the Coordinator /
-    // node blacklist will notice the failure + the ClusterMembershipMgr
+    lock_guard<mutex> l(*request_state->lock());
+    Status& retry_error = error;
+    retry_error.SetIsRetryable();
+    Status status = request_state->UpdateQueryStatus(retry_error);
+    VLOG_QUERY << "Ignoring UpdateQueryStatus message because it is being retried "
+               << status.GetDetail();
   }
 }
 

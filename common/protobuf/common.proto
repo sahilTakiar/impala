@@ -25,6 +25,7 @@ package impala;
 message StatusPB {
   optional int32 status_code = 1;
   repeated string error_msgs = 2;
+  optional int32 status_type = 3;
 }
 
 // 128-bit ID (equivalent to TUniqueID).

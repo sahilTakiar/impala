@@ -252,8 +252,10 @@ void Status::ToThrift(TStatus* status) const {
   status->error_msgs.clear();
   if (msg_ == nullptr) {
     status->status_code = TErrorCode::OK;
+    status->status_type = TErrorType::NONE;
   } else {
     status->status_code = msg_->error();
+    status->status_type = msg_->type();
     status->error_msgs.push_back(msg_->msg());
     for (const string& s: msg_->details()) status->error_msgs.push_back(s);
     status->__isset.error_msgs = true;
@@ -264,8 +266,10 @@ void Status::ToProto(StatusPB* status) const {
   status->Clear();
   if (msg_ == nullptr) {
     status->set_status_code(TErrorCode::OK);
+    status->set_status_type(TErrorType::NONE);
   } else {
     status->set_status_code(msg_->error());
+    status->set_status_type(msg_->type());
     status->add_error_msgs(msg_->msg());
     for (const string& s : msg_->details()) status->add_error_msgs(s);
   }
@@ -277,6 +281,7 @@ void Status::FromThrift(const TStatus& status) {
   } else {
     msg_ = new ErrorMsg();
     msg_->SetErrorCode(status.status_code);
+    msg_->SetErrorType(status.status_type);
     if (status.error_msgs.size() > 0) {
       // The first message is the actual error message. (See Status::ToThrift()).
       msg_->SetErrorMsg(status.error_msgs.front());
@@ -293,6 +298,7 @@ void Status::FromProto(const StatusPB& status) {
   } else {
     msg_ = new ErrorMsg();
     msg_->SetErrorCode(static_cast<TErrorCode::type>(status.status_code()));
+    msg_->SetErrorType(static_cast<TErrorType::type>(status.status_type()));
     if (status.error_msgs().size() > 0) {
       // The first message is the actual error message. (See Status::ToThrift()).
       msg_->SetErrorMsg(status.error_msgs().Get(0));

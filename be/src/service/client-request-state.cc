@@ -944,13 +944,18 @@ void ClientRequestState::UpdateNonErrorExecState(ExecState new_state) {
 
 Status ClientRequestState::UpdateQueryStatus(const Status& status) {
   // Preserve the first non-ok status
+  VLOG_QUERY << "Updating query status = " << status.GetDetail();
+  if (exec_state_ == ExecState::RETRIED) {
+    return status;
+  }
   if (!status.ok() && query_status_.ok()) {
     if (status.IsRetryableError() && exec_state_ != ExecState::RETRIED) {
       VLOG_QUERY << "Scheduling async retry ";
       parent_server_->RetryAsync(query_id(), status);
       UpdateExecState(ExecState::RETRIED);
     } else {
-      VLOG_QUERY << "Setting to error non-retryable error " << status.GetDetail();
+      VLOG_QUERY << "Setting to error non-retryable error " << status.GetDetail()
+                 << " retryable = " << status.IsRetryableError();
       UpdateExecState(ExecState::ERROR);
       query_status_ = status;
       summary_profile_->AddInfoStringRedacted("Query Status", query_status_.GetDetail());

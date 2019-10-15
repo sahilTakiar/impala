@@ -268,11 +268,11 @@ class NODISCARD Status {
   }
 
   void SetIsRetryable() {
-    if (msg_ != NULL) msg_->SetErrorType(ErrorMsg::ErrorType::RETRYABLE);
+    if (msg_ != NULL) msg_->SetErrorType(TErrorType::RETRYABLE);
   }
 
   bool IsRetryableError() const {
-    return msg_ != NULL && msg_->type() == ErrorMsg::ErrorType::RETRYABLE;
+    return msg_ != NULL && msg_->type() == TErrorType::RETRYABLE;
   }
 
   /// Returns the error message associated with a non-successful status.

@@ -55,7 +55,7 @@ class ErrorMsg {
   typedef strings::internal::SubstituteArg ArgType;
 
   /// Trivial constructor.
-  ErrorMsg() : error_(TErrorCode::OK) {}
+  ErrorMsg() : error_(TErrorCode::OK), type_(TErrorType::NONE) {}
 
   /// Below are a set of overloaded constructors taking all possible number of arguments
   /// that can be passed to Substitute. The reason is to try to avoid forcing the compiler
@@ -105,13 +105,9 @@ class ErrorMsg {
       const ArgType& arg8 = ArgType::kNoArg,
       const ArgType& arg9 = ArgType::kNoArg);
 
-  enum ErrorType {
-    RETRYABLE
-  };
-
   TErrorCode::type error() const { return error_; }
 
-  ErrorType type() const { return type_; }
+  TErrorType::type type() const { return type_; }
 
   /// Add detail string message.
   void AddDetail(const std::string& d) {
@@ -128,7 +124,7 @@ class ErrorMsg {
     message_ = msg;
   }
 
-  void SetErrorType(ErrorType type) {
+  void SetErrorType(TErrorType::type type) {
     type_ = type;
   }
 
@@ -149,7 +145,7 @@ private:
   TErrorCode::type error_;
   std::string message_;
   std::vector<std::string> details_;
-  ErrorType type_;
+  TErrorType::type type_;
 };
 
 /// Maps the HS2 TStatusCode types to the corresponding TErrorCode.

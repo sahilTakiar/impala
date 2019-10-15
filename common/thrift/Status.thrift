@@ -27,4 +27,5 @@ include "ErrorCodes.thrift"
 struct TStatus {
   1: required ErrorCodes.TErrorCode status_code
   2: list<string> error_msgs
+  3: optional ErrorCodes.TErrorType status_type
 }

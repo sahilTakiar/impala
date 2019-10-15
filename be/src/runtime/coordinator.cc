@@ -782,7 +782,7 @@ Status Coordinator::UpdateBackendExecStatus(const ReportExecStatusRequestPB& req
       if (status.IsRetryableError()) {
         VLOG_QUERY << "Attempting to parse error message " << status.GetDetail();
         string s = status.GetDetail();
-        std::regex rgx("TransmitData\\(\\) to (.*) failed");
+        std::regex rgx("(?:TransmitData|EndDataStream)\\(\\) to (.*) failed");
         std::smatch match;
         string dest_url;
         if (std::regex_search(s, match, rgx)) {
