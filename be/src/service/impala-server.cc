@@ -1451,6 +1451,8 @@ void ImpalaServer::RetryQueryFromThreadPool(
       new ClientRequestState(*query_ctx, exec_env_, exec_env_->frontend(), this,
           request_state->session_shared(), request_state->query())); // TODO session_shared()
 
+  retry_request_state->retried_id_ = new TUniqueId(request_state->query_id());
+
   retry_request_state->set_user_profile_access(retry_exec_request.user_has_profile_access);
   retry_request_state->summary_profile()->AddEventSequence(
       retry_exec_request.timeline.name, retry_exec_request.timeline);

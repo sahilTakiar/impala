@@ -203,6 +203,7 @@ class ClientRequestState {
   bool eos() const { return eos_; }
   const QuerySchedule* schedule() const { return schedule_.get(); }
   beeswax::Query* query() const { return query_; }
+  ExecState exec_state() const { return exec_state_; }
 
   /// Returns the Coordinator for 'QUERY' and 'DML' requests once Coordinator::Exec()
   /// completes successfully. Otherwise returns null.
@@ -289,6 +290,8 @@ class ClientRequestState {
 
   /// Returns the FETCH_ROWS_TIMEOUT_MS value for this query (converted to microseconds).
   int64_t fetch_rows_timeout_us() const { return fetch_rows_timeout_us_; }
+
+  TUniqueId* retried_id_;
 
 protected:
   /// Updates the end_time_us_ of this query if it isn't set. The end time is determined
