@@ -62,6 +62,31 @@ class TestQueryRetry(CustomClusterTestSuite):
     results = self.client.fetch(query, handle)
     assert results.success
     assert len(results.data) == 8
+    self.client.close_query(handle)
+
+  @pytest.mark.execute_serially
+  def test_query_retry_multi(self, cursor):
+    query = None
+    with open('/tmp/query4.txt', 'r') as tpcds_query4:
+      query = tpcds_query4.read()
+    assert self.execute_query("use tpcds_parquet").success
+    handle1 = self.execute_query_async(query)
+    handle2 = self.execute_query_async(query)
+    handle3 = self.execute_query_async(query)
+    self.wait_for_state(handle1, self.client.QUERY_STATES['RUNNING'], 60)
+    self.wait_for_state(handle2, self.client.QUERY_STATES['RUNNING'], 60)
+    self.wait_for_state(handle3, self.client.QUERY_STATES['RUNNING'], 60)
+    sleep(randint(0,10))
+    self.cluster.impalads[2].kill()
+    results1 = self.client.fetch(query, handle1)
+    assert results1.success
+    assert len(results1.data) == 8
+    results2 = self.client.fetch(query, handle2)
+    assert results2.success
+    assert len(results2.data) == 8
+    results3 = self.client.fetch(query, handle3)
+    assert results3.success
+    assert len(results3.data) == 8
 
 
 class TestRestart(CustomClusterTestSuite):
