@@ -909,7 +909,7 @@ class ImpalaServer : public ImpalaServiceIf,
   [[noreturn]] void RaiseBeeswaxException(const std::string& msg, const char* sql_state);
 
   /// Executes the fetch logic. Doesn't clean up the exec state if an error occurs.
-  Status FetchInternal(ClientRequestState* request_state, bool start_over,
+  Status FetchInternal(TUniqueId query_id, bool start_over,
       int32_t fetch_size, beeswax::Results* query_results) WARN_UNUSED_RESULT;
 
   /// Populate dml_result and clean up exec state. If the query

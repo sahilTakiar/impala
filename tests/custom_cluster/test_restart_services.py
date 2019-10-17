@@ -59,7 +59,6 @@ class TestQueryRetry(CustomClusterTestSuite):
     self.wait_for_state(handle, self.client.QUERY_STATES['RUNNING'], 60)
     sleep(randint(0,10))
     self.cluster.impalads[2].kill()
-    self.wait_for_state(handle, self.client.QUERY_STATES['FINISHED'], 60)
     results = self.client.fetch(query, handle)
     assert results.success
     assert len(results.data) == 8

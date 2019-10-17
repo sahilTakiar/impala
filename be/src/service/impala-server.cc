@@ -1429,7 +1429,8 @@ void ImpalaServer::RetryQueryFromThreadPool(
   // Need to lock here because UnregisterQuery removes the ClientRequestState from the map
   // so any attempts to call beeswax methods will fail becaus the state won't be in the
   // map.
-  lock_guard<mutex> l(retry_lock_); 
+  lock_guard<mutex> l(retry_lock_);
+  request_state->retried_.Notify();
   Status status = UnregisterQuery(retry_work.query_id(), true, &retry_work.error());
   DCHECK(status.ok()) << status.GetDetail();
   VLOG_QUERY << "Unregistered query";

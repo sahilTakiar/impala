@@ -90,7 +90,8 @@ static const string TABLES_WITH_MISSING_DISK_IDS_KEY = "Tables With Missing Disk
 ClientRequestState::ClientRequestState(
     const TQueryCtx& query_ctx, ExecEnv* exec_env, Frontend* frontend,
     ImpalaServer* server, shared_ptr<ImpalaServer::SessionState> session, beeswax::Query* query)
-  : query_ctx_(query_ctx),
+  : retried_(1),
+    query_ctx_(query_ctx),
     last_active_time_ms_(numeric_limits<int64_t>::max()),
     child_query_executor_(new ChildQueryExecutor),
     exec_env_(exec_env),
@@ -944,18 +945,14 @@ void ClientRequestState::UpdateNonErrorExecState(ExecState new_state) {
 
 Status ClientRequestState::UpdateQueryStatus(const Status& status) {
   // Preserve the first non-ok status
-  VLOG_QUERY << "Updating query status = " << status.GetDetail();
   if (exec_state_ == ExecState::RETRIED) {
     return status;
   }
   if (!status.ok() && query_status_.ok()) {
     if (status.IsRetryableError() && exec_state_ != ExecState::RETRIED) {
-      VLOG_QUERY << "Scheduling async retry ";
       parent_server_->RetryAsync(query_id(), status);
       UpdateExecState(ExecState::RETRIED);
     } else {
-      VLOG_QUERY << "Setting to error non-retryable error " << status.GetDetail()
-                 << " retryable = " << status.IsRetryableError();
       UpdateExecState(ExecState::ERROR);
       query_status_ = status;
       summary_profile_->AddInfoStringRedacted("Query Status", query_status_.GetDetail());

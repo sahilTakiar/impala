@@ -190,7 +190,7 @@ void ImpalaServer::fetch(Results& query_results, const QueryHandle& query_handle
   RAISE_IF_ERROR(CheckClientRequestSession(session.get(), request_state->effective_user(),
       query_id), SQLSTATE_GENERAL_ERROR);
   Status status =
-      FetchInternal(request_state.get(), start_over, fetch_size, &query_results);
+      FetchInternal(query_id, start_over, fetch_size, &query_results);
   VLOG_ROW << "fetch result: #results=" << query_results.data.size()
            << " has_more=" << (query_results.has_more ? "true" : "false");
   if (!status.ok()) {
@@ -546,25 +546,18 @@ inline void ImpalaServer::QueryHandleToTUniqueId(const QueryHandle& handle,
   throw exc;
 }
 
-Status ImpalaServer::FetchInternal(ClientRequestState* request_state,
+Status ImpalaServer::FetchInternal(TUniqueId query_id,
     const bool start_over, const int32_t fetch_size, beeswax::Results* query_results) {
   // Make sure ClientRequestState::Wait() has completed before fetching rows. Wait()
   // ensures that rows are ready to be fetched (e.g., Wait() opens
   // ClientRequestState::output_exprs_, which are evaluated in
   // ClientRequestState::FetchRows() below).
   int64_t block_on_wait_time_us = 0;
-  // TODO need some special handling here; what happens if fetch is called on a running
-  // query that then fails and is retried? the fetch request will block here, and
-  // eventually return and then fail; instead it should restart the fetch
-  // TODO this is potentially the major flaw with this approach, if everything was
-  // encapsulated within the ClientRequestState, this would be easier, because you can
-  // just use the same ClientRequesState, but now you need to switch it out magically
-  // Could use an AtomicPtr to fix this issue, even encapsulating this in CRS does not
-  // solve all the issues, if you make it this far into fetch, how do you force it to
-  // restart?
-  // TODO I think this is technically incorrect anyway, it should wait until it is FINISHED
-  // I don't think BlockOnWait returning guaranttes that is ready to fetch rows because the
-  // query could have failed and this would still return successfully 
+  shared_ptr<ClientRequestState> request_state;
+  {
+    lock_guard<mutex> l(retry_lock_);
+    request_state = GetClientRequestState(query_id);
+  }
   if (!request_state->BlockOnWait(
           request_state->fetch_rows_timeout_us(), &block_on_wait_time_us)) {
     query_results->__set_ready(false);
@@ -572,6 +565,20 @@ Status ImpalaServer::FetchInternal(ClientRequestState* request_state,
     query_results->__isset.columns = false;
     query_results->__isset.data = false;
     return Status::OK();
+  } else if (request_state->exec_state() == ClientRequestState::ExecState::RETRIED) {
+    request_state->retried_.Wait();
+    {
+      lock_guard<mutex> l(retry_lock_);
+      request_state = GetClientRequestState(query_id);
+    }
+    if (!request_state->BlockOnWait(
+            request_state->fetch_rows_timeout_us(), &block_on_wait_time_us)) {
+      query_results->__set_ready(false);
+      query_results->__set_has_more(true);
+      query_results->__isset.columns = false;
+      query_results->__isset.data = false;
+      return Status::OK();
+    }
   }
 
   lock_guard<mutex> frl(*request_state->fetch_rows_lock());

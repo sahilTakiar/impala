@@ -28,6 +28,7 @@
 #include "service/query-result-set.h"
 #include "util/auth-util.h"
 #include "util/condition-variable.h"
+#include "util/counting-barrier.h"
 #include "util/runtime-profile.h"
 #include "gen-cpp/Frontend_types.h"
 #include "gen-cpp/ImpalaHiveServer2Service.h"
@@ -292,6 +293,8 @@ class ClientRequestState {
   int64_t fetch_rows_timeout_us() const { return fetch_rows_timeout_us_; }
 
   TUniqueId* retried_id_;
+
+  CountingBarrier retried_;
 
 protected:
   /// Updates the end_time_us_ of this query if it isn't set. The end time is determined
