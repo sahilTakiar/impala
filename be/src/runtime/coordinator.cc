@@ -17,7 +17,6 @@
 
 #include "runtime/coordinator.h"
 
-#include <regex>
 #include <unordered_set>
 
 #include <thrift/protocol/TDebugProtocol.h>
@@ -776,29 +775,14 @@ Status Coordinator::UpdateBackendExecStatus(const ReportExecStatusRequestPB& req
       // Transition the status if we're not already in a terminal state. This won't block
       // because either this transitions to an ERROR state or the query is already in
       // a terminal state.
-      discard_result(
-          UpdateExecState(status, is_fragment_failure ? &failed_instance_id : nullptr,
+      discard_result(UpdateExecState(status,
+              is_fragment_failure ? &failed_instance_id : nullptr,
               TNetworkAddressToString(backend_state->impalad_address())));
-      if (status.IsRetryableError()) {
-        VLOG_QUERY << "Attempting to parse error message " << status.GetDetail();
-        string s = status.GetDetail();
-        std::regex rgx("(?:TransmitData|EndDataStream)\\(\\) to (.*) failed");
-        std::smatch match;
-        string dest_url;
-        if (std::regex_search(s, match, rgx)) {
-          dest_url = match[1];
-        }
-        vector<string> strs;
-        boost::split(strs, dest_url, boost::is_any_of(":"));
-        string host = strs[0];
-        int32_t port = std::stoi(strs[1]);
-        TNetworkAddress dest;
-        dest.__set_port(port);
-        dest.__set_hostname(host);
+      if (status.IsRetryable() && status.msg().IsRPCErrorMsg()) {
         for (auto be_state : backend_states_) {
-          if (be_state->krpc_impalad_address().port == dest.port) {
-            // The Exec() rpc failed, so blacklist the executor.
-            LOG(INFO) << "Blacklisting " << TNetworkAddressToString(dest)
+          if (be_state->krpc_impalad_address() == status.msg().rpc_msg().dest_node()) {
+            LOG(INFO) << "Blacklisting "
+                      << TNetworkAddressToString(status.msg().rpc_msg().dest_node())
                       << " because a TransmitData() rpc to it failed.";
             const TBackendDescriptor& be_desc = be_state->exec_params()->be_desc;
             ExecEnv::GetInstance()->cluster_membership_mgr()->BlacklistExecutor(be_desc);

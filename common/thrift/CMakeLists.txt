@@ -196,6 +196,7 @@ set(THRIFT11_PYTHON_ARGS ${THRIFT_INCLUDE_DIR_OPTION} -r --gen py -o
                          ${THRIFT11_PYTHON_OUTPUT_DIR})
 
 set (EXT_DATA_SRC_FILES
+  Common.thrift
   ErrorCodes.thrift
   ExternalDataSource.thrift
   Data.thrift
@@ -210,6 +211,7 @@ set (SRC_FILES
   CatalogInternalService.thrift
   CatalogObjects.thrift
   CatalogService.thrift
+  Common.thrift
   DataSinks.thrift
   Descriptors.thrift
   ExecStats.thrift

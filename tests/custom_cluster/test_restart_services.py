@@ -87,6 +87,9 @@ class TestQueryRetry(CustomClusterTestSuite):
     results3 = self.client.fetch(query, handle3)
     assert results3.success
     assert len(results3.data) == 8
+    self.client.close_query(handle1)
+    self.client.close_query(handle2)
+    self.client.close_query(handle3)
 
 
 class TestRestart(CustomClusterTestSuite):

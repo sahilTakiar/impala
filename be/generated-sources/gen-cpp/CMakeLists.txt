@@ -30,6 +30,7 @@ set(SRC_FILES
   CatalogService_types.cpp
   CatalogInternalService_constants.cpp
   CatalogInternalService_types.cpp
+  Common_types.cpp
   ImpalaInternalService.cpp
   ImpalaInternalService_constants.cpp
   ImpalaInternalService_types.cpp

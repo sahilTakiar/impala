@@ -18,6 +18,7 @@
 namespace cpp impala
 namespace java org.apache.impala.thrift
 
+include "Common.thrift"
 include "Status.thrift"
 include "Types.thrift"
 
@@ -60,7 +61,7 @@ struct TExecutorGroupDesc {
 // both.
 struct TBackendDescriptor {
   // Network address of the thrift based ImpalaInternalService on this backend
-  1: required Types.TNetworkAddress address;
+  1: required Common.TNetworkAddress address;
 
   // IP address corresponding to address.hostname. Explicitly including this saves the
   // cost of resolution at every Impalad (since IP addresses are needed for scheduling)
@@ -73,13 +74,13 @@ struct TBackendDescriptor {
   4: required bool is_executor;
 
   // The address of the debug HTTP server
-  5: optional Types.TNetworkAddress debug_http_address;
+  5: optional Common.TNetworkAddress debug_http_address;
 
   // True if the debug webserver is secured (for correctly generating links)
   6: optional bool secure_webserver;
 
   // IP address + port of KRPC based ImpalaInternalService on this backend
-  7: optional Types.TNetworkAddress krpc_address;
+  7: optional Common.TNetworkAddress krpc_address;
 
   // The amount of memory that can be admitted to this backend (in bytes).
   8: required i64 admit_mem_limit;
@@ -181,7 +182,7 @@ struct TRegisterSubscriberRequest {
   2: required string subscriber_id;
 
   // Location of the StatestoreSubscriberService that this subscriber runs
-  3: required Types.TNetworkAddress subscriber_location;
+  3: required Common.TNetworkAddress subscriber_location;
 
   // List of topics to subscribe to
   4: required list<TTopicRegistration> topic_registrations;

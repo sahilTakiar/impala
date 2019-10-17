@@ -18,6 +18,7 @@
 namespace cpp impala
 namespace java org.apache.impala.thrift
 
+include "Common.thrift"
 include "Types.thrift"
 include "ImpalaInternalService.thrift"
 include "PlanNodes.thrift"
@@ -427,7 +428,7 @@ struct TQueryExecRequest {
   6: required Types.TStmtType stmt_type
 
   // List of replica hosts.  Used by the host_idx field of TScanRangeLocation.
-  7: required list<Types.TNetworkAddress> host_list
+  7: required list<Common.TNetworkAddress> host_list
 
   // Column lineage graph
   8: optional LineageGraph.TLineageGraph lineage_graph
@@ -543,7 +544,7 @@ struct TShutdownParams {
   // the current impala daemon will be shut down. If the port was specified, it is set
   // in 'backend'. If it was not specified, it is 0 and the port configured for this
   // Impala daemon is assumed.
-  1: optional Types.TNetworkAddress backend
+  1: optional Common.TNetworkAddress backend
 
   // Deadline in seconds for shutting down.
   2: optional i64 deadline_s

@@ -74,12 +74,13 @@ inline bool operator!=(const TNetworkAddress& lhs, const TNetworkAddress& rhs) {
 }
 
 // TStatus
-STATIC_ASSERT_SIZE(TStatus, 48);
+STATIC_ASSERT_SIZE(TStatus, 88);
 
 inline bool operator==(const TStatus& lhs, const TStatus& rhs) {
-  //static_assert_size<TStatus, 48>();
-  return std::tie(lhs.status_code, lhs.error_msgs)
-      == std::tie(rhs.status_code, rhs.error_msgs);
+  // static_assert_size<TStatus, 88>();
+  return std::tie(lhs.status_code, lhs.error_msgs, lhs.status_type, lhs.rpc_msg.dest_node)
+      == std::tie(
+             rhs.status_code, rhs.error_msgs, rhs.status_type, rhs.rpc_msg.dest_node);
 }
 
 // TCounter

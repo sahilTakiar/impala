@@ -138,14 +138,6 @@ enum TPrefetchMode {
   HT_BUCKET = 1
 }
 
-// A TNetworkAddress is the standard host, port representation of a
-// network address. The hostname field must be resolvable to an IPv4
-// address.
-struct TNetworkAddress {
-  1: required string hostname
-  2: required i32 port
-}
-
 // Wire format for UniqueId
 struct TUniqueId {
   1: required i64 hi

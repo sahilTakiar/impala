@@ -18,14 +18,25 @@
 namespace cpp impala
 namespace java org.apache.impala.thrift
 
+include "Common.thrift"
 include "ErrorCodes.thrift"
 
 // NOTE: The definitions in this file are part of the binary format of the Impala query
 // profiles. They should preserve backwards compatibility and as such some rules apply
 // when making changes. Please see RuntimeProfile.thrift for more details.
 
+enum TErrorType {
+  NONE = 0
+  RETRYABLE = 1
+}
+
+struct TRPCErrorMessage {
+  1: required Common.TNetworkAddress dest_node
+}
+
 struct TStatus {
   1: required ErrorCodes.TErrorCode status_code
   2: list<string> error_msgs
-  3: optional ErrorCodes.TErrorType status_type
+  3: optional TErrorType status_type
+  4: optional TRPCErrorMessage rpc_msg
 }

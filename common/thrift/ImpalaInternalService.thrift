@@ -21,6 +21,7 @@
 namespace cpp impala
 namespace java org.apache.impala.thrift
 
+include "Common.thrift"
 include "Status.thrift"
 include "ErrorCodes.thrift"
 include "Types.thrift"
@@ -429,7 +430,7 @@ struct TSessionState {
   6: optional string delegated_user;
 
   // Client network address
-  4: required Types.TNetworkAddress network_address
+  4: required Common.TNetworkAddress network_address
 
   // If set, the latest Kudu timestamp observed within this session.
   7: optional i64 kudu_latest_observed_ts;
@@ -482,10 +483,10 @@ struct TQueryCtx {
 
   // The initiating coordinator's address of its thrift based ImpalaInternalService.
   // TODO: determine whether we can get this somehow via the Thrift rpc mechanism.
-  6: optional Types.TNetworkAddress coord_address
+  6: optional Common.TNetworkAddress coord_address
 
   // The initiating coordinator's address of its KRPC based ImpalaInternalService.
-  7: optional Types.TNetworkAddress coord_krpc_address
+  7: optional Common.TNetworkAddress coord_krpc_address
 
   // List of tables missing relevant table and/or column stats. Used for
   // populating query-profile fields consumed by CM as well as warning messages.
@@ -577,10 +578,10 @@ struct TPlanFragmentDestination {
   1: required Types.TUniqueId fragment_instance_id
 
   // hostname + port of the Thrift based ImpalaInteralService on the destination
-  2: required Types.TNetworkAddress thrift_backend
+  2: required Common.TNetworkAddress thrift_backend
 
   // IP address + port of the KRPC based ImpalaInternalService on the destination
-  3: optional Types.TNetworkAddress krpc_backend
+  3: optional Common.TNetworkAddress krpc_backend
 }
 
 // Context to collect information, which is shared among all instances of that plan

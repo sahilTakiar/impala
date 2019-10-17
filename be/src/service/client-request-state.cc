@@ -949,7 +949,7 @@ Status ClientRequestState::UpdateQueryStatus(const Status& status) {
     return status;
   }
   if (!status.ok() && query_status_.ok()) {
-    if (status.IsRetryableError() && exec_state_ != ExecState::RETRIED) {
+    if (status.IsRetryable() && exec_state_ != ExecState::RETRIED) {
       parent_server_->RetryAsync(query_id(), status);
       UpdateExecState(ExecState::RETRIED);
     } else {

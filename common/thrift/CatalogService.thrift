@@ -19,6 +19,7 @@ namespace cpp impala
 namespace java org.apache.impala.thrift
 
 include "CatalogObjects.thrift"
+include "Common.thrift"
 include "JniCatalog.thrift"
 include "Types.thrift"
 include "Status.thrift"
@@ -369,7 +370,7 @@ struct TPartialTableInfo {
   // Used so that each THdfsFileBlock can just reference an index in this list rather
   // than duplicate the list of network address, which helps reduce memory usage.
   // Only used when partition files are fetched.
-  7: optional list<Types.TNetworkAddress> network_addresses
+  7: optional list<Common.TNetworkAddress> network_addresses
 }
 
 // Selector for partial information about a Database.

@@ -345,6 +345,7 @@ Status KrpcDataStreamSender::Channel::WaitForRpc(std::unique_lock<SpinLock>* loc
                << "(fragment_instance_id=" << PrintId(fragment_instance_id_) << "): "
                << rpc_status_.GetDetail();
     rpc_status_.SetIsRetryable();
+    rpc_status_.SetRPCErrorMsg(RPCErrorMsg(address_));
     return rpc_status_;
   }
   return Status::OK();
@@ -387,6 +388,7 @@ void KrpcDataStreamSender::Channel::HandleFailedRPC(const DoRpcFn& rpc_fn,
   }
   Status status = FromKuduStatus(controller_status, prepend);
   status.SetIsRetryable();
+  status.SetRPCErrorMsg(RPCErrorMsg(address_));
   MarkDone(status);
 }
 

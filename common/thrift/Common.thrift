@@ -15,38 +15,19 @@
 // specific language governing permissions and limitations
 // under the License.
 
-// Common protobuf definitions.
+namespace cpp impala
+namespace java org.apache.impala.thrift
 
-syntax="proto2";
+// Collection of common Thrift objects.
 
-package impala;
+// NOTE: The definitions in this file are part of the binary format of the Impala query
+// profiles. They should preserve backwards compatibility and as such some rules apply
+// when making changes. Please see RuntimeProfile.thrift for more details.
 
-message NetworkAddressPB {
-  required string hostname = 1;
-  required int32 port = 2;
-}
-
-message RPCErrorMessagePB {
-  required NetworkAddressPB dest_node = 1;
-}
-
-// Proto-serialized version of Impala's Status object.
-message StatusPB {
-  optional int32 status_code = 1;
-  repeated string error_msgs = 2;
-  optional int32 status_type = 3;
-  optional RPCErrorMessagePB rpc_msg = 4;
-}
-
-// 128-bit ID (equivalent to TUniqueID).
-message UniqueIdPB {
-  required fixed64 hi = 1;
-  required fixed64 lo = 2;
-}
-
-// The compression codec. Currently used in row batch's header to
-// indicate the type of compression applied to the row batch.
-enum CompressionType {
-  NONE = 0; // No compression.
-  LZ4 = 1;
+// A TNetworkAddress is the standard host, port representation of a
+// network address. The hostname field must be resolvable to an IPv4
+// address.
+struct TNetworkAddress {
+  1: required string hostname
+  2: required i32 port
 }

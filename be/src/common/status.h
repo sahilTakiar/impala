@@ -268,11 +268,17 @@ class NODISCARD Status {
   }
 
   void SetIsRetryable() {
-    if (msg_ != NULL) msg_->SetErrorType(TErrorType::RETRYABLE);
+    DCHECK(msg_ != NULL);
+    msg_->SetErrorType(TErrorType::RETRYABLE);
   }
 
-  bool IsRetryableError() const {
+  bool IsRetryable() const {
     return msg_ != NULL && msg_->type() == TErrorType::RETRYABLE;
+  }
+
+  void SetRPCErrorMsg(RPCErrorMsg rpc_msg) {
+    DCHECK(msg_ != NULL);
+    msg_->SetRPCErrorMsg(rpc_msg);
   }
 
   /// Returns the error message associated with a non-successful status.

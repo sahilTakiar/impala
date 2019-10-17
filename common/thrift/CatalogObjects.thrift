@@ -18,6 +18,7 @@
 namespace cpp impala
 namespace java org.apache.impala.thrift
 
+include "Common.thrift"
 include "Exprs.thrift"
 include "Status.thrift"
 include "Types.thrift"
@@ -364,7 +365,7 @@ struct THdfsTable {
   // Each TNetworkAddress is a datanode which contains blocks of a file in the table.
   // Used so that each THdfsFileBlock can just reference an index in this list rather
   // than duplicate the list of network address, which helps reduce memory usage.
-  7: optional list<Types.TNetworkAddress> network_addresses
+  7: optional list<Common.TNetworkAddress> network_addresses
 }
 
 struct THBaseTable {

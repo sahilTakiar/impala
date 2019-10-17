@@ -21,6 +21,7 @@
 #include "common/status.h"
 
 #include "util/debug-util.h"
+#include "util/network-util.h"
 #include "common/names.h"
 #include "gen-cpp/common.pb.h"
 #include "gen-cpp/ErrorCodes_types.h"
@@ -259,6 +260,11 @@ void Status::ToThrift(TStatus* status) const {
     status->error_msgs.push_back(msg_->msg());
     for (const string& s: msg_->details()) status->error_msgs.push_back(s);
     status->__isset.error_msgs = true;
+    if (msg_->IsRPCErrorMsg()) {
+      TRPCErrorMessage rpc_msg;
+      rpc_msg.dest_node = msg_->rpc_msg().dest_node();
+      status->rpc_msg = rpc_msg;
+    }
   }
 }
 
@@ -272,6 +278,14 @@ void Status::ToProto(StatusPB* status) const {
     status->set_status_type(msg_->type());
     status->add_error_msgs(msg_->msg());
     for (const string& s : msg_->details()) status->add_error_msgs(s);
+    if (msg_->IsRPCErrorMsg()) {
+      RPCErrorMessagePB* rpc_msg = new RPCErrorMessagePB();
+      NetworkAddressPB* dest_node = new NetworkAddressPB();
+      dest_node->set_hostname(msg_->rpc_msg().dest_node().hostname);
+      dest_node->set_port(msg_->rpc_msg().dest_node().port);
+      rpc_msg->set_allocated_dest_node(dest_node);
+      status->set_allocated_rpc_msg(rpc_msg);
+    }
   }
 }
 
@@ -281,13 +295,16 @@ void Status::FromThrift(const TStatus& status) {
   } else {
     msg_ = new ErrorMsg();
     msg_->SetErrorCode(status.status_code);
-    msg_->SetErrorType(status.status_type);
+    if (status.__isset.status_type) msg_->SetErrorType(status.status_type);
     if (status.error_msgs.size() > 0) {
       // The first message is the actual error message. (See Status::ToThrift()).
       msg_->SetErrorMsg(status.error_msgs.front());
       // The following messages are details.
       std::for_each(status.error_msgs.begin() + 1, status.error_msgs.end(),
           [&](string const& detail) { msg_->AddDetail(detail); });
+    }
+    if (status.__isset.rpc_msg) {
+      msg_->SetRPCErrorMsg(RPCErrorMsg(status.rpc_msg.dest_node));
     }
   }
 }
@@ -298,13 +315,19 @@ void Status::FromProto(const StatusPB& status) {
   } else {
     msg_ = new ErrorMsg();
     msg_->SetErrorCode(static_cast<TErrorCode::type>(status.status_code()));
-    msg_->SetErrorType(static_cast<TErrorType::type>(status.status_type()));
+    if (status.has_status_type()) {
+      msg_->SetErrorType(static_cast<TErrorType::type>(status.status_type()));
+    }
     if (status.error_msgs().size() > 0) {
       // The first message is the actual error message. (See Status::ToThrift()).
       msg_->SetErrorMsg(status.error_msgs().Get(0));
       // The following messages are details.
       std::for_each(status.error_msgs().begin() + 1, status.error_msgs().end(),
           [&](string const& detail) { msg_->AddDetail(detail); });
+    }
+    if (status.has_rpc_msg()) {
+      msg_->SetRPCErrorMsg(RPCErrorMsg(MakeNetworkAddress(
+          status.rpc_msg().dest_node().hostname(), status.rpc_msg().dest_node().port())));
     }
   }
 }

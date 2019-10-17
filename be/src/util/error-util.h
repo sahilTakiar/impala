@@ -19,6 +19,7 @@
 #ifndef IMPALA_UTIL_ERROR_UTIL_H
 #define IMPALA_UTIL_ERROR_UTIL_H
 
+#include <boost/optional.hpp>
 #include <string>
 #include <vector>
 
@@ -46,6 +47,15 @@ std::string GetStrErrMsg(int err_no);
 std::string GetTablesMissingStatsWarning(
     const std::vector<TTableName>& tables_missing_stats);
 
+class RPCErrorMsg {
+ public:
+  RPCErrorMsg(TNetworkAddress dest_node) : dest_node_(dest_node) {}
+
+  TNetworkAddress dest_node() const { return dest_node_; }
+
+ private:
+  TNetworkAddress dest_node_;
+};
 
 /// Class that holds a formatted error message and potentially a set of detail
 /// messages. Error messages are intended to be user facing. Error details can be attached
@@ -109,6 +119,11 @@ class ErrorMsg {
 
   TErrorType::type type() const { return type_; }
 
+  const RPCErrorMsg& rpc_msg() const {
+    DCHECK(rpc_msg_);
+    return *rpc_msg_;
+  }
+
   /// Add detail string message.
   void AddDetail(const std::string& d) {
     details_.push_back(d);
@@ -128,6 +143,14 @@ class ErrorMsg {
     type_ = type;
   }
 
+  void SetRPCErrorMsg(RPCErrorMsg rpc_msg) {
+    rpc_msg_ = rpc_msg;
+  }
+
+  bool IsRPCErrorMsg() const {
+    return rpc_msg_ ? true : false;
+  }
+
   /// Return the formatted error string.
   const std::string& msg() const {
     return message_;
@@ -143,9 +166,10 @@ class ErrorMsg {
 
 private:
   TErrorCode::type error_;
+  TErrorType::type type_;
   std::string message_;
   std::vector<std::string> details_;
-  TErrorType::type type_;
+  boost::optional<RPCErrorMsg> rpc_msg_;
 };
 
 /// Maps the HS2 TStatusCode types to the corresponding TErrorCode.
