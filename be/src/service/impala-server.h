@@ -681,6 +681,9 @@ class ImpalaServer : public ImpalaServiceIf,
   Status RegisterQuery(std::shared_ptr<SessionState> session_state,
       const std::shared_ptr<ClientRequestState>& exec_state) WARN_UNUSED_RESULT;
 
+  Status MapQueryIdToClientRequest(const TUniqueId& query_id,
+      const std::shared_ptr<ClientRequestState>& request_state);
+
   /// Adds the query to the set of in-flight queries for the session. The query remains
   /// in-flight until the query is unregistered.  Until a query is in-flight, an attempt
   /// to cancel or close the query by the user will return an error status.  If the

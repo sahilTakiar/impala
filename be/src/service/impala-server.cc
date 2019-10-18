@@ -1035,26 +1035,30 @@ Status ImpalaServer::RegisterQuery(shared_ptr<SessionState> session_state,
     return Status::Expected("Session has been closed, ignoring query.");
   }
   const TUniqueId& query_id = request_state->query_id();
-  {
-    DCHECK_EQ(this, ExecEnv::GetInstance()->impala_server());
-    ScopedShardedMapRef<std::shared_ptr<ClientRequestState>> map_ref(query_id,
-        &client_request_state_map_);
-    DCHECK(map_ref.get() != nullptr);
-
-    auto entry = map_ref->find(query_id);
-    if (entry != map_ref->end()) {
-      // There shouldn't be an active query with that same id.
-      // (query_id is globally unique)
-      stringstream ss;
-      ss << "query id " << PrintId(query_id) << " already exists";
-      return Status(ErrorMsg(TErrorCode::INTERNAL_ERROR, ss.str()));
-    }
-    map_ref->insert(make_pair(query_id, request_state));
-  }
+  RETURN_IF_ERROR(MapQueryIdToClientRequest(query_id, request_state));
   // Metric is decremented in UnregisterQuery().
   ImpaladMetrics::NUM_QUERIES_REGISTERED->Increment(1L);
   VLOG_QUERY << "Registered query query_id=" << PrintId(query_id)
              << " session_id=" << PrintId(request_state->session_id());
+  return Status::OK();
+}
+
+Status ImpalaServer::MapQueryIdToClientRequest(
+    const TUniqueId& query_id, const shared_ptr<ClientRequestState>& request_state) {
+  DCHECK_EQ(this, ExecEnv::GetInstance()->impala_server());
+  ScopedShardedMapRef<std::shared_ptr<ClientRequestState>> map_ref(
+      query_id, &client_request_state_map_);
+  DCHECK(map_ref.get() != nullptr);
+
+  auto entry = map_ref->find(query_id);
+  if (entry != map_ref->end()) {
+    // There shouldn't be an active query with that same id.
+    // (query_id is globally unique)
+    stringstream ss;
+    ss << "query id " << PrintId(query_id) << " already exists";
+    return Status(ErrorMsg(TErrorCode::INTERNAL_ERROR, ss.str()));
+  }
+  map_ref->insert(make_pair(query_id, request_state));
   return Status::OK();
 }
 
@@ -1436,26 +1440,21 @@ void ImpalaServer::RetryQueryFromThreadPool(
   VLOG_QUERY << "Unregistered query";
   // TODO there is a probably a bug somewhere and TQueryCtx is being copied, which is
   // why the Coordinator version works, but not the ClientRequestState one
-  // TODO not clear if this needs to be copied
   VLOG_QUERY << "Preparing query context";
-  // TODO why can't we juse use the regular one? request_state->query_ctx() - if it works for the
-  // original attempt, why not the retry one as well?
-  TQueryCtx* query_ctx = new TQueryCtx(request_state->exec_query_ctx());
-  PrepareQueryContext(query_ctx);
+  shared_ptr<TExecRequest> retry_exec_request = request_state->exec_request();
+  const TQueryCtx& query_ctx = retry_exec_request->query_exec_request.query_ctx;
+  PrepareQueryContext(&retry_exec_request->query_exec_request.query_ctx);
   VLOG_QUERY << "Prepared query context";
 
-  // TODO not clear if this needs to be copied
-  shared_ptr<TExecRequest> retry_exec_request = request_state->exec_request();
   shared_ptr<ClientRequestState> retry_request_state;
   retry_request_state.reset(new ClientRequestState(
-      *query_ctx, exec_env_, exec_env_->frontend(), this, request_state->session()));
+      query_ctx, exec_env_, exec_env_->frontend(), this, request_state->session()));
 
   retry_request_state->retried_id_ = new TUniqueId(request_state->query_id());
 
-  retry_request_state->set_user_profile_access(retry_exec_request->user_has_profile_access);
-  retry_request_state->summary_profile()->AddEventSequence(
-      retry_exec_request->timeline.name, retry_exec_request->timeline);
-  retry_request_state->SetFrontendProfile(retry_exec_request->profile);
+  // We don't set the Frontend timeline since the Frontend code was never invoked.
+  retry_request_state->set_user_profile_access(
+      retry_exec_request->user_has_profile_access);
   if (retry_exec_request->__isset.result_set_metadata) {
     retry_request_state->set_result_metadata(retry_exec_request->result_set_metadata);
   }
@@ -1466,27 +1465,10 @@ void ImpalaServer::RetryQueryFromThreadPool(
 
   // Associate the old query_id with the new ClientRequestState so that existing
   // QueryHandles still work
-  {
-    DCHECK_EQ(this, ExecEnv::GetInstance()->impala_server());
-    ScopedShardedMapRef<std::shared_ptr<ClientRequestState>> map_ref(
-        query_id, &client_request_state_map_);
-    DCHECK(map_ref.get() != nullptr);
-
-    auto entry = map_ref->find(query_id);
-    if (entry != map_ref->end()) {
-      // There shouldn't be an active query with that same id.
-      // (query_id is globally unique)
-      stringstream ss;
-      ss << "query id " << PrintId(query_id) << " already exists";
-      status = Status(ErrorMsg(TErrorCode::INTERNAL_ERROR, ss.str()));
-      DCHECK(status.ok()) << status.GetDetail();
-    }
-    map_ref->insert(make_pair(query_id, retry_request_state));
-  }
+  status = MapQueryIdToClientRequest(query_id, retry_request_state);
+  DCHECK(status.ok());
 
   VLOG_QUERY << "Calling ClientRequestState::Exec";
-  // TODO what is this for? this is potentially messing things up
-  retry_exec_request->query_exec_request.__set_query_ctx(*query_ctx);
   status = retry_request_state->Exec(retry_exec_request);
   DCHECK(status.ok()) << status.GetDetail();
   VLOG_QUERY << "Calling ClientRequestState::WaitAsync";

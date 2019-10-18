@@ -226,7 +226,6 @@ class Coordinator { // NOLINT: The member variables could be re-ordered to save 
   std::vector<TNetworkAddress> GetActiveBackends(
       const std::vector<TNetworkAddress>& candidates);
 
-  const TQueryCtx& query_ctx() const;
  private:
   class BackendState;
   class BackendResourceState;
@@ -411,6 +410,7 @@ class Coordinator { // NOLINT: The member variables could be re-ordered to save 
   /// HDFS INSERT finalization is not required.
   const TFinalizeParams* finalize_params() const;
 
+  const TQueryCtx& query_ctx() const;
 
   const TUniqueId& query_id() const;
 
