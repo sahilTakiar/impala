@@ -72,7 +72,7 @@ class ClientRequestState {
   enum class ExecState {
     INITIALIZED, PENDING, RUNNING, FINISHED, ERROR, RETRIED
   };
-  
+
   /// Sets the profile that is produced by the frontend. The frontend creates the
   /// profile during planning and returns it to the backend via TExecRequest,
   /// which then sets the frontend profile.
@@ -141,8 +141,7 @@ class ClientRequestState {
   /// only for non-error states (PENDING_STATE, RUNNING_STATE and FINISHED_STATE) - if the
   /// query encounters an error the query status needs to be set with information about
   /// the error so UpdateQueryStatus() must be used instead. Takes lock_.
-  void UpdateNonErrorExecState(
-      ExecState exec_state);
+  void UpdateNonErrorExecState(ExecState exec_state);
 
   /// Update the query status and the "Query Status" summary profile string.
   /// If current status is already != ok, no update is made (we preserve the first error)
@@ -190,6 +189,7 @@ class ClientRequestState {
   bool GetDmlStats(TDmlResult* dml_result, Status* query_status);
 
   std::shared_ptr<ImpalaServer::SessionState> session() const { return session_; }
+
   /// Queries are run and authorized on behalf of the effective_user.
   const std::string& effective_user() const {
       return GetEffectiveUser(query_ctx_.session);
@@ -225,9 +225,6 @@ class ClientRequestState {
   const TResultSetMetadata* result_metadata() const { return &result_metadata_; }
   const TUniqueId& query_id() const { return query_ctx_.query_id; }
   std::shared_ptr<TExecRequest> exec_request() const { return exec_request_; }
-  const TQueryCtx& exec_query_ctx() const {
-    return exec_request_->query_exec_request.query_ctx;
-  }
   TStmtType::type stmt_type() const { return exec_request_->stmt_type; }
   TCatalogOpType::type catalog_op_type() const {
     return exec_request_->catalog_op_request.op_type;
@@ -456,7 +453,6 @@ protected:
   bool is_cancelled_ = false; // if true, Cancel() was called.
   bool eos_ = false;  // if true, there are no more rows to return
 
-  // TODO should use AtomicEnum?
   enum ExecState exec_state_ = ExecState::INITIALIZED;
 
   /// We enforce the invariant that query_status_ is not OK iff operation_state_ is

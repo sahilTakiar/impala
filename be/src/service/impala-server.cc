@@ -1027,8 +1027,7 @@ Status ImpalaServer::RegisterQuery(shared_ptr<SessionState> session_state,
   lock_guard<mutex> l2(session_state->lock);
   // The session wasn't expired at the time it was checked out and it isn't allowed to
   // expire while checked out, so it must not be expired.
-  //DCHECK_GT(session_state->ref_count, 0);
-  DCHECK(!session_state->expired);
+  DCHECK(session_state->ref_count > 0 && !session_state->expired);
   // The session may have been closed after it was checked out.
   if (session_state->closed) {
     VLOG(1) << "RegisterQuery(): session has been closed, ignoring query.";
@@ -1068,7 +1067,7 @@ Status ImpalaServer::SetQueryInflight(shared_ptr<SessionState> session_state,
   lock_guard<mutex> l(session_state->lock);
   // The session wasn't expired at the time it was checked out and it isn't allowed to
   // expire while checked out, so it must not be expired.
-  //DCHECK_GT(session_state->ref_count, 0);
+  DCHECK_GT(session_state->ref_count, 0);
   DCHECK(!session_state->expired);
   // The session may have been closed after it was checked out.
   if (session_state->closed) {
@@ -1313,7 +1312,6 @@ Status ImpalaServer::GetSessionState(const TUniqueId& session_id, const SecretAr
   // it probably doesn't not need to be held for the full duration of this function.
   if (i == session_state_map_.end() || !secret.Validate(i->second->secret)) {
     if (i == session_state_map_.end()) VLOG_QUERY << "i == session_state_map_.end()";
-    //VLOG_QUERY << "i == session_state_map_.end() " << (i == session_state_map_.end()) << " !secret.Validate(i->second->secret) " << (!secret.Validate(i->second->secret));
     if (i != session_state_map_.end()) {
       // Log invalid attempts to connect. Be careful not to log secret.
       VLOG(1) << "Client tried to connect to session " << PrintId(session_id)
@@ -1321,11 +1319,10 @@ Status ImpalaServer::GetSessionState(const TUniqueId& session_id, const SecretAr
               << (secret.is_session_secret() ? "session" : "operation") << " secret.";
     }
     *session_state = std::shared_ptr<SessionState>();
-    // TODO maybe the secrete validation was messed up?
     string err_msg = secret.is_session_secret() ?
         Substitute("Invalid session id: $0", PrintId(session_id)) :
         Substitute(LEGACY_INVALID_QUERY_HANDLE_TEMPLATE, PrintId(secret.query_id()));
-    VLOG(1) << "GetSessionState(): " << err_msg << GetStackTrace();
+    VLOG(1) << "GetSessionState(): " << err_msg;
     return Status::Expected(err_msg);
   } else {
     if (mark_active) {

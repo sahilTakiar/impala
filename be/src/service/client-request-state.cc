@@ -827,7 +827,6 @@ void ClientRequestState::Wait() {
     if (stmt_type() == TStmtType::DDL) {
       DCHECK(catalog_op_type() != TCatalogOpType::DDL || request_result_set_ != nullptr);
     }
-    VLOG_QUERY << "Setting status to FINISHED " << GetStackTrace();
     UpdateNonErrorExecState(ExecState::FINISHED);
   }
   // UpdateQueryStatus() or UpdateNonErrorExecState() have updated exec_state_.
