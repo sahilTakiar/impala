@@ -29,8 +29,8 @@ class RetryWork {
   // Empty constructor needed to make ThreadPool happy.
   RetryWork() {}
 
-  RetryWork(const TUniqueId& query_id, const Status& error) 
-    : query_id_(query_id), error_(error) {};
+  RetryWork(const TUniqueId& query_id, const Status& error)
+    : query_id_(query_id), error_(error){};
 
   const TUniqueId& query_id() const { return query_id_; }
   const Status& error() const { return error_; }

@@ -1548,15 +1548,12 @@ void ImpalaServer::CancelFromThreadPool(uint32_t thread_id,
                  << ") failed";
     }
   } else {
-    VLOG_QUERY << "CancelFromThreadPool(): cancelling query_id=" << PrintId(query_id);
-    //Status status = request_state->Cancel(true, &error);
-    VLOG_QUERY << "Cancel thread pool is submitting a retry";
+    VLOG_QUERY << "CancelFromThreadPool(): retrying query_id=" << PrintId(query_id)
+               << " status=" << error.GetDetail();
+    // TODO fix locking
     lock_guard<mutex> l(*request_state->lock());
-    Status& retry_error = error;
-    retry_error.SetIsRetryable();
-    Status status = request_state->UpdateQueryStatus(retry_error);
-    VLOG_QUERY << "Ignoring UpdateQueryStatus message because it is being retried "
-               << status.GetDetail();
+    error.SetIsRetryable();
+    discard_result(request_state->UpdateQueryStatus(error));
   }
 }
 

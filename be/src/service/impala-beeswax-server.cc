@@ -60,7 +60,7 @@ void ImpalaServer::query(QueryHandle& query_handle, const Query& query) {
       SQLSTATE_GENERAL_ERROR);
   TQueryCtx query_ctx;
   // raise general error for request conversion error;
-  RAISE_IF_ERROR(QueryToTQueryContext(query, &query_ctx, ThriftServer::GetThreadConnectionId()), SQLSTATE_GENERAL_ERROR);
+  RAISE_IF_ERROR(QueryToTQueryContext(query, &query_ctx), SQLSTATE_GENERAL_ERROR);
 
   // raise Syntax error or access violation; it's likely to be syntax/analysis error
   // TODO: that may not be true; fix this
@@ -96,7 +96,7 @@ void ImpalaServer::executeAndWait(QueryHandle& query_handle, const Query& query,
       SQLSTATE_GENERAL_ERROR);
   TQueryCtx query_ctx;
   // raise general error for request conversion error;
-  RAISE_IF_ERROR(QueryToTQueryContext(query, &query_ctx, ThriftServer::GetThreadConnectionId()), SQLSTATE_GENERAL_ERROR);
+  RAISE_IF_ERROR(QueryToTQueryContext(query, &query_ctx), SQLSTATE_GENERAL_ERROR);
 
   shared_ptr<ClientRequestState> request_state;
   DCHECK(session != nullptr);  // The session should exist.
@@ -148,7 +148,7 @@ void ImpalaServer::explain(QueryExplanation& query_explanation, const Query& que
       SQLSTATE_GENERAL_ERROR);
 
   TQueryCtx query_ctx;
-  RAISE_IF_ERROR(QueryToTQueryContext(query, &query_ctx, ThriftServer::GetThreadConnectionId()), SQLSTATE_GENERAL_ERROR);
+  RAISE_IF_ERROR(QueryToTQueryContext(query, &query_ctx), SQLSTATE_GENERAL_ERROR);
 
   RAISE_IF_ERROR(
       exec_env_->frontend()->GetExplainPlan(query_ctx, &query_explanation.textual),
@@ -481,15 +481,15 @@ void ImpalaServer::ResetTable(impala::TStatus& status, const TResetTableReq& req
 }
 
 Status ImpalaServer::QueryToTQueryContext(const Query& query,
-    TQueryCtx* query_ctx, const TUniqueId& session_id) {
+    TQueryCtx* query_ctx) {
   query_ctx->client_request.stmt = query.query;
   VLOG_QUERY << "query: " << ThriftDebugString(query);
   QueryOptionsMask set_query_options_mask;
   {
     shared_ptr<SessionState> session;
+    const TUniqueId& session_id = ThriftServer::GetThreadConnectionId();
     // OK to skip secret validation since 'session_id' comes from connection
     // and is trusted.
-    VLOG_QUERY << "session_id = " << session_id;
     RETURN_IF_ERROR(GetSessionState(session_id, SecretArg::SkipSecretCheck(), &session,
         /* mark_active= */ false));
     DCHECK(session != nullptr);

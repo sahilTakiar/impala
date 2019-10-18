@@ -900,7 +900,7 @@ class ImpalaServer : public ImpalaServiceIf,
   /// Beeswax private methods
 
   /// Helper functions to translate between Beeswax and Impala structs
-  Status QueryToTQueryContext(const beeswax::Query& query, TQueryCtx* query_ctx, const TUniqueId& session_id)
+  Status QueryToTQueryContext(const beeswax::Query& query, TQueryCtx* query_ctx)
       WARN_UNUSED_RESULT;
   void TUniqueIdToQueryHandle(const TUniqueId& query_id, beeswax::QueryHandle* handle);
   void QueryHandleToTUniqueId(const beeswax::QueryHandle& handle, TUniqueId* query_id);
@@ -1026,7 +1026,6 @@ class ImpalaServer : public ImpalaServiceIf,
 
   /// Guards query_log_ and query_log_index_
   boost::mutex query_log_lock_;
-
 
   /// FIFO list of query records, which are written after the query finishes executing
   typedef std::list<QueryStateRecord> QueryLog;

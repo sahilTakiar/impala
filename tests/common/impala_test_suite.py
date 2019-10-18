@@ -1052,7 +1052,6 @@ class ImpalaTestSuite(BaseTestSuite):
     while actual_state not in expected_states and time.time() - start_time < timeout:
       actual_state = self.client.get_state(handle)
       time.sleep(0.5)
-      print str(time.time())
     if actual_state not in expected_states:
       raise Timeout("query {0} did not reach one of the expected states {1}, "
                     "last known state {2}".format(handle.get_handle().id, expected_states,
