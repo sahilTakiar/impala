@@ -884,7 +884,7 @@ void ImpalaServer::AddPoolConfiguration(TQueryCtx* ctx,
 
 Status ImpalaServer::Execute(TQueryCtx* query_ctx,
     shared_ptr<SessionState> session_state,
-    shared_ptr<ClientRequestState>* request_state, Query* query) {
+    shared_ptr<ClientRequestState>* request_state) {
   PrepareQueryContext(query_ctx);
   ScopedThreadContext debug_ctx(GetThreadDebugInfo(), query_ctx->query_id);
   ImpaladMetrics::IMPALA_SERVER_NUM_QUERIES->Increment(1L);
@@ -896,7 +896,7 @@ Status ImpalaServer::Execute(TQueryCtx* query_ctx,
 
   bool registered_request_state;
   Status status = ExecuteInternal(*query_ctx, session_state, &registered_request_state,
-      request_state, query);
+      request_state);
   if (!status.ok() && registered_request_state) {
     discard_result(UnregisterQuery((*request_state)->query_id(), false, &status));
   }
@@ -907,16 +907,16 @@ Status ImpalaServer::ExecuteInternal(
     const TQueryCtx& query_ctx,
     shared_ptr<SessionState> session_state,
     bool* registered_request_state,
-    shared_ptr<ClientRequestState>* request_state, Query* query) {
+    shared_ptr<ClientRequestState>* request_state) {
   DCHECK(session_state != nullptr);
   *registered_request_state = false;
 
   request_state->reset(new ClientRequestState(query_ctx, exec_env_, exec_env_->frontend(),
-      this, session_state, query));
+      this, session_state));
 
   (*request_state)->query_events()->MarkEvent("Query submitted");
 
-  TExecRequest result;
+  shared_ptr<TExecRequest> result = make_shared<TExecRequest>();
   {
     // Keep a lock on request_state so that registration and setting
     // result_metadata are atomic.
@@ -945,21 +945,21 @@ Status ImpalaServer::ExecuteInternal(
     }
 
     RETURN_IF_ERROR((*request_state)->UpdateQueryStatus(
-        exec_env_->frontend()->GetExecRequest(query_ctx, &result)));
+        exec_env_->frontend()->GetExecRequest(query_ctx, result.get())));
 
     (*request_state)->query_events()->MarkEvent("Planning finished");
-    (*request_state)->set_user_profile_access(result.user_has_profile_access);
+    (*request_state)->set_user_profile_access(result->user_has_profile_access);
     (*request_state)->summary_profile()->AddEventSequence(
-        result.timeline.name, result.timeline);
-    (*request_state)->SetFrontendProfile(result.profile);
-    if (result.__isset.result_set_metadata) {
-      (*request_state)->set_result_metadata(result.result_set_metadata);
+        result->timeline.name, result->timeline);
+    (*request_state)->SetFrontendProfile(result->profile);
+    if (result->__isset.result_set_metadata) {
+      (*request_state)->set_result_metadata(result->result_set_metadata);
     }
   }
-  VLOG(2) << "Execution request: " << ThriftDebugString(result);
+  VLOG(2) << "Execution request: " << ThriftDebugString(*result);
 
   // start execution of query; also starts fragment status reports
-  RETURN_IF_ERROR((*request_state)->Exec(&result));
+  RETURN_IF_ERROR((*request_state)->Exec(result));
   Status status = UpdateCatalogMetrics();
   if (!status.ok()) {
     VLOG_QUERY << "Couldn't update catalog metrics: " << status.GetDetail();
@@ -1438,32 +1438,30 @@ void ImpalaServer::RetryQueryFromThreadPool(
   // why the Coordinator version works, but not the ClientRequestState one
   // TODO not clear if this needs to be copied
   VLOG_QUERY << "Preparing query context";
-  TQueryCtx* query_ctx = new TQueryCtx(request_state->GetCoordinator()->query_ctx());
-  status = QueryToTQueryContext(
-      *request_state->query(), query_ctx, request_state->session_id());
-  DCHECK(status.ok()) << status.GetDetail();
+  // TODO why can't we juse use the regular one? request_state->query_ctx() - if it works for the
+  // original attempt, why not the retry one as well?
+  TQueryCtx* query_ctx = new TQueryCtx(request_state->exec_query_ctx());
   PrepareQueryContext(query_ctx);
   VLOG_QUERY << "Prepared query context";
 
   // TODO not clear if this needs to be copied
-  TExecRequest retry_exec_request = request_state->exec_request();
+  shared_ptr<TExecRequest> retry_exec_request = request_state->exec_request();
   shared_ptr<ClientRequestState> retry_request_state;
-  retry_request_state.reset(
-      new ClientRequestState(*query_ctx, exec_env_, exec_env_->frontend(), this,
-          request_state->session_shared(), request_state->query())); // TODO session_shared()
+  retry_request_state.reset(new ClientRequestState(
+      *query_ctx, exec_env_, exec_env_->frontend(), this, request_state->session()));
 
   retry_request_state->retried_id_ = new TUniqueId(request_state->query_id());
 
-  retry_request_state->set_user_profile_access(retry_exec_request.user_has_profile_access);
+  retry_request_state->set_user_profile_access(retry_exec_request->user_has_profile_access);
   retry_request_state->summary_profile()->AddEventSequence(
-      retry_exec_request.timeline.name, retry_exec_request.timeline);
-  retry_request_state->SetFrontendProfile(retry_exec_request.profile);
-  if (retry_exec_request.__isset.result_set_metadata) {
-    retry_request_state->set_result_metadata(retry_exec_request.result_set_metadata);
+      retry_exec_request->timeline.name, retry_exec_request->timeline);
+  retry_request_state->SetFrontendProfile(retry_exec_request->profile);
+  if (retry_exec_request->__isset.result_set_metadata) {
+    retry_request_state->set_result_metadata(retry_exec_request->result_set_metadata);
   }
 
   VLOG_QUERY << "Re-registering query";
-  status = RegisterQuery(request_state->session_shared(), retry_request_state);
+  status = RegisterQuery(request_state->session(), retry_request_state);
   DCHECK(status.ok()) << status.GetDetail();
 
   // Associate the old query_id with the new ClientRequestState so that existing
@@ -1487,13 +1485,14 @@ void ImpalaServer::RetryQueryFromThreadPool(
   }
 
   VLOG_QUERY << "Calling ClientRequestState::Exec";
-  retry_exec_request.query_exec_request.__set_query_ctx(*query_ctx);
-  status = retry_request_state->Exec(&retry_exec_request);
+  // TODO what is this for? this is potentially messing things up
+  retry_exec_request->query_exec_request.__set_query_ctx(*query_ctx);
+  status = retry_request_state->Exec(retry_exec_request);
   DCHECK(status.ok()) << status.GetDetail();
   VLOG_QUERY << "Calling ClientRequestState::WaitAsync";
   status = retry_request_state->WaitAsync();
   DCHECK(status.ok());
-  status = SetQueryInflight(request_state->session_shared(), retry_request_state);
+  status = SetQueryInflight(request_state->session(), retry_request_state);
   DCHECK(status.ok()) << status.GetDetail();
 }
 
@@ -1918,7 +1917,7 @@ void ImpalaServer::BuildLocalBackendDescriptorInternal(TBackendDescriptor* be_de
 ImpalaServer::QueryStateRecord::QueryStateRecord(const ClientRequestState& request_state,
     bool copy_profile, const string& encoded_profile) {
   id = request_state.query_id();
-  const TExecRequest& request = request_state.exec_request();
+  const TExecRequest& request = *request_state.exec_request();
 
   const string* plan_str = request_state.summary_profile()->GetInfoString("Plan");
   if (plan_str != nullptr) plan = *plan_str;
@@ -1969,7 +1968,7 @@ ImpalaServer::QueryStateRecord::QueryStateRecord(const ClientRequestState& reque
 
   // Save the query fragments so that the plan can be visualised.
   for (const TPlanExecInfo& plan_exec_info:
-      request_state.exec_request().query_exec_request.plan_exec_info) {
+      request_state.exec_request()->query_exec_request.plan_exec_info) {
     fragments.insert(fragments.end(),
         plan_exec_info.fragments.begin(), plan_exec_info.fragments.end());
   }

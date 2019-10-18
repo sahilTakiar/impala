@@ -855,14 +855,14 @@ void ImpalaHttpHandler::QuerySummaryHandler(bool include_json_plan, bool include
       lock_guard<mutex> l(*request_state->lock());
       query_status = request_state->query_status();
       stmt = request_state->sql_stmt();
-      plan = request_state->exec_request().query_exec_request.query_plan;
+      plan = request_state->exec_request()->query_exec_request.query_plan;
       if ((include_json_plan || include_summary)
           && request_state->GetCoordinator() != nullptr) {
         request_state->GetCoordinator()->GetTExecSummary(&summary);
       }
       if (include_json_plan) {
         for (const TPlanExecInfo& plan_exec_info:
-            request_state->exec_request().query_exec_request.plan_exec_info) {
+            request_state->exec_request()->query_exec_request.plan_exec_info) {
           for (const TPlanFragment& fragment: plan_exec_info.fragments) {
             fragments.push_back(fragment);
           }

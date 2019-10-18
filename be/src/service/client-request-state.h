@@ -65,12 +65,12 @@ enum class AdmissionOutcome;
 class ClientRequestState {
  public:
   ClientRequestState(const TQueryCtx& query_ctx, ExecEnv* exec_env, Frontend* frontend,
-      ImpalaServer* server, std::shared_ptr<ImpalaServer::SessionState> session, beeswax::Query* query);
+      ImpalaServer* server, std::shared_ptr<ImpalaServer::SessionState> session);
 
   ~ClientRequestState();
 
   enum class ExecState {
-    INITIALIZED, RUNNING, FINISHED, CANCELLED, CLOSED, ERROR, UNKNOWN, PENDING, RETRIED
+    INITIALIZED, PENDING, RUNNING, FINISHED, ERROR, RETRIED
   };
   
   /// Sets the profile that is produced by the frontend. The frontend creates the
@@ -83,7 +83,7 @@ class ClientRequestState {
   /// returns the operation state is either RUNNING_STATE or PENDING_STATE.
   /// Non-blocking.
   /// Must *not* be called with lock_ held.
-  Status Exec(TExecRequest* exec_request) WARN_UNUSED_RESULT;
+  Status Exec(std::shared_ptr<TExecRequest> exec_request) WARN_UNUSED_RESULT;
 
   /// Execute a HiveServer2 metadata operation
   /// TODO: This is likely a superset of GetTableNames/GetDbs. Coalesce these different
@@ -189,8 +189,7 @@ class ClientRequestState {
   /// Caller must not hold 'lock()'.
   bool GetDmlStats(TDmlResult* dml_result, Status* query_status);
 
-  ImpalaServer::SessionState* session() const { return session_.get(); }
-  std::shared_ptr<ImpalaServer::SessionState> session_shared() const { return session_; }
+  std::shared_ptr<ImpalaServer::SessionState> session() const { return session_; }
   /// Queries are run and authorized on behalf of the effective_user.
   const std::string& effective_user() const {
       return GetEffectiveUser(query_ctx_.session);
@@ -203,7 +202,6 @@ class ClientRequestState {
   const std::string& default_db() const { return query_ctx_.session.database; }
   bool eos() const { return eos_; }
   const QuerySchedule* schedule() const { return schedule_.get(); }
-  beeswax::Query* query() const { return query_; }
   ExecState exec_state() const { return exec_state_; }
 
   /// Returns the Coordinator for 'QUERY' and 'DML' requests once Coordinator::Exec()
@@ -226,13 +224,16 @@ class ClientRequestState {
   bool returns_result_set() { return !result_metadata_.columns.empty(); }
   const TResultSetMetadata* result_metadata() const { return &result_metadata_; }
   const TUniqueId& query_id() const { return query_ctx_.query_id; }
-  const TExecRequest& exec_request() const { return exec_request_; }
-  TStmtType::type stmt_type() const { return exec_request_.stmt_type; }
+  std::shared_ptr<TExecRequest> exec_request() const { return exec_request_; }
+  const TQueryCtx& exec_query_ctx() const {
+    return exec_request_->query_exec_request.query_ctx;
+  }
+  TStmtType::type stmt_type() const { return exec_request_->stmt_type; }
   TCatalogOpType::type catalog_op_type() const {
-    return exec_request_.catalog_op_request.op_type;
+    return exec_request_->catalog_op_request.op_type;
   }
   TDdlType::type ddl_type() const {
-    return exec_request_.catalog_op_request.ddl_params.ddl_type;
+    return exec_request_->catalog_op_request.ddl_params.ddl_type;
   }
   boost::mutex* lock() { return &lock_; }
   boost::mutex* fetch_rows_lock() { return &fetch_rows_lock_; }
@@ -257,7 +258,7 @@ class ClientRequestState {
   TUniqueId parent_query_id() const { return query_ctx_.parent_query_id; }
 
   const std::vector<std::string>& GetAnalysisWarnings() const {
-    return exec_request_.analysis_warnings;
+    return exec_request_->analysis_warnings;
   }
 
   inline int64_t last_active_ms() const {
@@ -463,7 +464,7 @@ protected:
   /// using UpdateExecState(), to ensure that the query profile is also updated.
 
   Status query_status_;
-  TExecRequest exec_request_;
+  std::shared_ptr<TExecRequest> exec_request_;
 
   /// If true, effective_user() has access to the runtime profile and execution
   /// summary.
@@ -618,7 +619,5 @@ protected:
   /// Logs audit and column lineage events. Expects that Wait() has already finished.
   /// Grabs lock_ for polling the query_status(). Hence do not call it under lock_.
   void LogQueryEvents();
-
-  beeswax::Query* query_;
 };
 }

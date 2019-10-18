@@ -65,8 +65,7 @@ void ImpalaServer::query(QueryHandle& query_handle, const Query& query) {
   // raise Syntax error or access violation; it's likely to be syntax/analysis error
   // TODO: that may not be true; fix this
   shared_ptr<ClientRequestState> request_state;
-  Query* query_ = new Query(query);
-  RAISE_IF_ERROR(Execute(&query_ctx, session, &request_state, query_),
+  RAISE_IF_ERROR(Execute(&query_ctx, session, &request_state),
       SQLSTATE_SYNTAX_ERROR_OR_ACCESS_VIOLATION);
 
   // start thread to wait for results to become available, which will allow
