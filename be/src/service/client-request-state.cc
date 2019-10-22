@@ -87,9 +87,19 @@ static const string TABLES_MISSING_STATS_KEY = "Tables Missing Stats";
 static const string TABLES_WITH_CORRUPT_STATS_KEY = "Tables With Corrupt Table Stats";
 static const string TABLES_WITH_MISSING_DISK_IDS_KEY = "Tables With Missing Disk Ids";
 
+static const std::map<ClientRequestState::ExecState, const char*> EXEC_STATE_STRINGS = {
+    {ClientRequestState::ExecState::INITIALIZED, "INITIALIZED"},
+    {ClientRequestState::ExecState::PENDING, "PENDING"},
+    {ClientRequestState::ExecState::RUNNING, "RUNNING"},
+    {ClientRequestState::ExecState::FINISHED, "FINISHED"},
+    {ClientRequestState::ExecState::ERROR, "ERROR"},
+    {ClientRequestState::ExecState::RETRYING, "RETRYING"},
+    {ClientRequestState::ExecState::RETRIED, "RETRIED"}};
+
 ClientRequestState::ClientRequestState(
     const TQueryCtx& query_ctx, ExecEnv* exec_env, Frontend* frontend,
-    ImpalaServer* server, shared_ptr<ImpalaServer::SessionState> session)
+    ImpalaServer* server, shared_ptr<ImpalaServer::SessionState> session,
+    shared_ptr<TExecRequest> exec_request)
   : retried_(1),
     query_ctx_(query_ctx),
     last_active_time_ms_(numeric_limits<int64_t>::max()),
@@ -102,6 +112,7 @@ ClientRequestState::ClientRequestState(
     frontend_profile_(RuntimeProfile::Create(&profile_pool_, "Frontend")),
     server_profile_(RuntimeProfile::Create(&profile_pool_, "ImpalaServer")),
     summary_profile_(RuntimeProfile::Create(&profile_pool_, "Summary")),
+    exec_request_(exec_request),
     frontend_(frontend),
     parent_server_(server),
     start_time_us_(UnixMicros()),
@@ -178,9 +189,8 @@ void ClientRequestState::SetFrontendProfile(TRuntimeProfileNode profile) {
   frontend_profile_->Update(prof_tree);
 }
 
-Status ClientRequestState::Exec(shared_ptr<TExecRequest> exec_request) {
+Status ClientRequestState::Exec() {
   MarkActive();
-  exec_request_ = exec_request;
 
   profile_->AddChild(server_profile_);
   summary_profile_->AddInfoString("Query Type", PrintThriftEnum(stmt_type()));
@@ -830,8 +840,9 @@ void ClientRequestState::Wait() {
     UpdateNonErrorExecState(ExecState::FINISHED);
   }
   // UpdateQueryStatus() or UpdateNonErrorExecState() have updated exec_state_.
-  DCHECK(exec_state_ == ExecState::FINISHED ||
-      exec_state_ == ExecState::ERROR || exec_state_ == ExecState::RETRIED);
+  // TODO revisit this check
+  DCHECK(exec_state_ == ExecState::FINISHED || exec_state_ == ExecState::ERROR
+      || exec_state_ == ExecState::RETRYING || exec_state_ == ExecState::RETRIED);
   // Notify all the threads blocked on Wait() to finish and then log the query events,
   // if any.
   {
@@ -921,7 +932,6 @@ Status ClientRequestState::RestartFetch() {
 
 void ClientRequestState::UpdateNonErrorExecState(ExecState new_state) {
   lock_guard<mutex> l(lock_);
-  // TODO we probably don't need most of these states
   switch (new_state) {
     case ExecState::PENDING:
       if (exec_state_ == ExecState::INITIALIZED) {
@@ -936,20 +946,26 @@ void ClientRequestState::UpdateNonErrorExecState(ExecState new_state) {
         UpdateExecState(new_state);
       }
       break;
+    case ExecState::RETRIED:
+      DCHECK(exec_state_ == ExecState::RETRYING);
+      UpdateExecState(new_state);
+      VLOG_QUERY << "Setting query status to retried";
+      summary_profile_->AddInfoStringRedacted("Query Status", "Retried: " + query_status_.GetDetail());
+      break;
     default:
-      DCHECK(false); //<< "A non-error state expected but got: " << new_state;
+      DCHECK(false) << "A non-error state expected but got: " << ExecStateToString(new_state);
   }
 }
 
 Status ClientRequestState::UpdateQueryStatus(const Status& status) {
   // Preserve the first non-ok status
-  if (exec_state_ == ExecState::RETRIED) {
-    return status;
-  }
   if (!status.ok() && query_status_.ok()) {
-    if (status.IsRetryable() && exec_state_ != ExecState::RETRIED) {
+    if (status.IsRetryable() && exec_state_ != ExecState::RETRYING) {
+      UpdateExecState(ExecState::RETRYING);
+      VLOG_QUERY << "scheduling retry of query " << query_id() << GetStackTrace();
       parent_server_->RetryAsync(query_id(), status);
-      UpdateExecState(ExecState::RETRIED);
+      query_status_ = status;
+      summary_profile_->AddInfoStringRedacted("Query Status", "Retrying: " + query_status_.GetDetail());
     } else {
       UpdateExecState(ExecState::ERROR);
       query_status_ = status;
@@ -1105,7 +1121,9 @@ Status ClientRequestState::Cancel(bool check_inflight, const Status* cause) {
       DCHECK(!cause->ok());
       discard_result(UpdateQueryStatus(*cause));
       query_events_->MarkEvent("Cancelled");
-      DCHECK(exec_state_ == ExecState::ERROR || exec_state_ == ExecState::RETRIED);
+      // TODO revisit this check
+      DCHECK(exec_state_ == ExecState::ERROR || exec_state_ == ExecState::RETRYING
+          || exec_state_ == ExecState::RETRIED);
     }
 
     admit_outcome_.Set(AdmissionOutcome::CANCELLED);
@@ -1284,6 +1302,7 @@ void ClientRequestState::MarkInactive() {
   lock_guard<mutex> l(expiration_data_lock_);
   last_active_time_ms_ = UnixMillis();
   DCHECK(ref_count_ > 0) << "Invalid MarkInactive()";
+  VLOG_QUERY << "ClientRequestState::MarkInactive decrementing ref_count";
   --ref_count_;
 }
 
@@ -1293,6 +1312,7 @@ void ClientRequestState::MarkActive() {
   client_wait_timer_->Set(elapsed_time);
   lock_guard<mutex> l(expiration_data_lock_);
   last_active_time_ms_ = UnixMillis();
+  VLOG_QUERY << "ClientRequestState::MarkActive incrementing ref_count";
   ++ref_count_;
 }
 
@@ -1348,7 +1368,12 @@ void ClientRequestState::ClearResultCache() {
 
 void ClientRequestState::UpdateExecState(ExecState exec_state) {
   exec_state_ = exec_state;
-  summary_profile_->AddInfoString("Query State", PrintThriftEnum(BeeswaxQueryState()));
+  if (exec_state_ == ExecState::RETRIED || exec_state_ == ExecState::RETRYING) {
+    VLOG_QUERY << "setting status to retried of retrying";
+    summary_profile_->AddInfoString("Query State", ExecStateToString(exec_state));
+  } else {
+    summary_profile_->AddInfoString("Query State", PrintThriftEnum(BeeswaxQueryState()));
+  }
 }
 
 beeswax::QueryState::type ClientRequestState::BeeswaxQueryState() const {
@@ -1358,6 +1383,8 @@ beeswax::QueryState::type ClientRequestState::BeeswaxQueryState() const {
     case ExecState::RUNNING: return beeswax::QueryState::RUNNING;
     case ExecState::FINISHED: return beeswax::QueryState::FINISHED;
     case ExecState::ERROR: return beeswax::QueryState::EXCEPTION;
+    // TODO not sure if this is the right thing to do
+    case ExecState::RETRYING: return beeswax::QueryState::RUNNING;
     case ExecState::RETRIED: return beeswax::QueryState::RUNNING;
     default: {
       DCHECK(false) << "Add explicit translation for all used TOperationState values";
@@ -1373,6 +1400,9 @@ TOperationState::type ClientRequestState::operation_state() const {
     case ExecState::RUNNING: return TOperationState::RUNNING_STATE;
     case ExecState::FINISHED: return TOperationState::FINISHED_STATE;
     case ExecState::ERROR: return TOperationState::ERROR_STATE;
+    // TODO not sure if this is the right thing to do
+    case ExecState::RETRYING: return TOperationState::RUNNING_STATE;
+    case ExecState::RETRIED: return TOperationState::RUNNING_STATE;
     default: {
       DCHECK(false) << "Add explicit translation for all used TOperationState values";
       return TOperationState::ERROR_STATE;
@@ -1630,4 +1660,7 @@ Status ClientRequestState::LogLineageRecord() {
   return Status::OK();
 }
 
+string ClientRequestState::ExecStateToString(ExecState state) const {
+  return EXEC_STATE_STRINGS.at(state);
+}
 }

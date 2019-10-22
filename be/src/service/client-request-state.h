@@ -65,12 +65,13 @@ enum class AdmissionOutcome;
 class ClientRequestState {
  public:
   ClientRequestState(const TQueryCtx& query_ctx, ExecEnv* exec_env, Frontend* frontend,
-      ImpalaServer* server, std::shared_ptr<ImpalaServer::SessionState> session);
+      ImpalaServer* server, std::shared_ptr<ImpalaServer::SessionState> session,
+      std::shared_ptr<TExecRequest> exec_request);
 
   ~ClientRequestState();
 
   enum class ExecState {
-    INITIALIZED, PENDING, RUNNING, FINISHED, ERROR, RETRIED
+    INITIALIZED, PENDING, RUNNING, FINISHED, ERROR, RETRYING, RETRIED
   };
 
   /// Sets the profile that is produced by the frontend. The frontend creates the
@@ -83,7 +84,7 @@ class ClientRequestState {
   /// returns the operation state is either RUNNING_STATE or PENDING_STATE.
   /// Non-blocking.
   /// Must *not* be called with lock_ held.
-  Status Exec(std::shared_ptr<TExecRequest> exec_request) WARN_UNUSED_RESULT;
+  Status Exec() WARN_UNUSED_RESULT;
 
   /// Execute a HiveServer2 metadata operation
   /// TODO: This is likely a superset of GetTableNames/GetDbs. Coalesce these different
@@ -187,6 +188,8 @@ class ClientRequestState {
   /// Return true if the result was set, otherwise return false.
   /// Caller must not hold 'lock()'.
   bool GetDmlStats(TDmlResult* dml_result, Status* query_status);
+
+  std::string ExecStateToString(ExecState state) const;
 
   std::shared_ptr<ImpalaServer::SessionState> session() const { return session_; }
 

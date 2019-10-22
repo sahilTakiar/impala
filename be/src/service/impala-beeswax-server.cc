@@ -193,6 +193,7 @@ void ImpalaServer::fetch(Results& query_results, const QueryHandle& query_handle
   VLOG_ROW << "fetch result: #results=" << query_results.data.size()
            << " has_more=" << (query_results.has_more ? "true" : "false");
   if (!status.ok()) {
+    VLOG_QUERY << "fetch failed with errror " << status.GetDetail() << " for query " << query_id;
     discard_result(UnregisterQuery(query_id, false, &status));
     RaiseBeeswaxException(status.GetDetail(), SQLSTATE_GENERAL_ERROR);
   }
@@ -554,32 +555,24 @@ Status ImpalaServer::FetchInternal(TUniqueId query_id,
   // ClientRequestState::FetchRows() below).
   int64_t block_on_wait_time_us = 0;
   shared_ptr<ClientRequestState> request_state;
-  {
-    lock_guard<mutex> l(retry_lock_);
-    request_state = GetClientRequestState(query_id);
-  }
-  if (!request_state->BlockOnWait(
-          request_state->fetch_rows_timeout_us(), &block_on_wait_time_us)) {
-    query_results->__set_ready(false);
-    query_results->__set_has_more(true);
-    query_results->__isset.columns = false;
-    query_results->__isset.data = false;
-    return Status::OK();
-  } else if (request_state->exec_state() == ClientRequestState::ExecState::RETRIED) {
-    request_state->retried_.Wait();
+  bool block_on_wait = false;
+  do {
     {
       lock_guard<mutex> l(retry_lock_);
       request_state = GetClientRequestState(query_id);
     }
-    if (!request_state->BlockOnWait(
-            request_state->fetch_rows_timeout_us(), &block_on_wait_time_us)) {
+    block_on_wait = request_state->BlockOnWait(
+        request_state->fetch_rows_timeout_us(), &block_on_wait_time_us);
+    if (!block_on_wait) {
       query_results->__set_ready(false);
       query_results->__set_has_more(true);
       query_results->__isset.columns = false;
       query_results->__isset.data = false;
       return Status::OK();
     }
-  }
+    // TODO this is essentially busy waiting until the new CRS is setup
+  } while (request_state->exec_state() == ClientRequestState::ExecState::RETRYING
+      || request_state->exec_state() == ClientRequestState::ExecState::RETRIED);
 
   lock_guard<mutex> frl(*request_state->fetch_rows_lock());
   lock_guard<mutex> l(*request_state->lock());
@@ -589,6 +582,9 @@ Status ImpalaServer::FetchInternal(TUniqueId query_id,
   }
 
   // Check for cancellation or an error.
+  VLOG_QUERY << "state for request_state = "
+             << request_state->ExecStateToString(request_state->exec_state())
+             << " query_id = " << query_id << "request_state id = " << request_state->query_id();
   RETURN_IF_ERROR(request_state->query_status());
 
   // ODBC-190: set Beeswax's Results.columns to work around bug ODBC-190;

@@ -543,7 +543,7 @@ Status Coordinator::UpdateExecState(const Status& status,
         "ExecState: query id=$0 finstance=$1 on host=$2 ($3 -> $4) status=$5",
         PrintId(query_id()), failed_finst != nullptr ? PrintId(*failed_finst) : "N/A",
         instance_hostname, ExecStateToString(old_state), ExecStateToString(new_state),
-        status.GetDetail());
+        status.GetDetail()) << GetStackTrace();
   }
   // After dropping the lock, apply the state transition (if any) side-effects.
   HandleExecStateTransition(old_state, new_state);
@@ -778,6 +778,7 @@ Status Coordinator::UpdateBackendExecStatus(const ReportExecStatusRequestPB& req
       discard_result(UpdateExecState(status,
               is_fragment_failure ? &failed_instance_id : nullptr,
               TNetworkAddressToString(backend_state->impalad_address())));
+      VLOG_QUERY << "Got error from UpdateBackendExecStatus " << status.GetDetail();
       if (status.IsRetryable() && status.msg().IsRPCErrorMsg()) {
         for (auto be_state : backend_states_) {
           if (be_state->krpc_impalad_address() == status.msg().rpc_msg().dest_node()) {

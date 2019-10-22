@@ -39,6 +39,7 @@
 #include "runtime/timestamp-value.h"
 #include "runtime/types.h"
 #include "scheduling/query-schedule.h"
+//#include "service/client-request-state.h"
 #include "service/query-options.h"
 #include "statestore/statestore-subscriber.h"
 #include "util/condition-variable.h"
@@ -681,8 +682,14 @@ class ImpalaServer : public ImpalaServiceIf,
   Status RegisterQuery(std::shared_ptr<SessionState> session_state,
       const std::shared_ptr<ClientRequestState>& exec_state) WARN_UNUSED_RESULT;
 
+  typedef class ShardedQueryMap<std::shared_ptr<ClientRequestState>>
+      ClientRequestStateMap;
   Status MapQueryIdToClientRequest(const TUniqueId& query_id,
-      const std::shared_ptr<ClientRequestState>& request_state);
+      const std::shared_ptr<ClientRequestState>& request_state,
+      ClientRequestStateMap* client_request_state_map) WARN_UNUSED_RESULT;
+
+  Status EraseQueryIdFromClientRequestMap(const TUniqueId& query_id,
+      std::shared_ptr<ClientRequestState>* request_state) WARN_UNUSED_RESULT;
 
   /// Adds the query to the set of in-flight queries for the session. The query remains
   /// in-flight until the query is unregistered.  Until a query is in-flight, an attempt
@@ -703,6 +710,9 @@ class ImpalaServer : public ImpalaServiceIf,
   /// cleaning up after an error on the query issuing path).
   Status UnregisterQuery(const TUniqueId& query_id, bool check_inflight,
       const Status* cause = NULL) WARN_UNUSED_RESULT;
+
+  Status CloseClientRequestState(
+      const std::shared_ptr<ClientRequestState>& request_state) WARN_UNUSED_RESULT;
 
   /// Initiates query cancellation reporting the given cause as the query status.
   /// Assumes deliberate cancellation by the user if the cause is NULL.  Returns an
@@ -854,6 +864,8 @@ class ImpalaServer : public ImpalaServiceIf,
 
     /// The state of the query as of this snapshot
     beeswax::QueryState::type query_state;
+
+    std::string exec_state_string;
 
     /// Start and end time of the query, in Unix microseconds.
     /// A query whose end_time_us is 0 indicates that it is an in-flight query.
@@ -1087,9 +1099,9 @@ class ImpalaServer : public ImpalaServiceIf,
 
   /// maps from query id to exec state; ClientRequestState is owned by us and referenced
   /// as a shared_ptr to allow asynchronous deletion
-  typedef class ShardedQueryMap<std::shared_ptr<ClientRequestState>>
-      ClientRequestStateMap;
   ClientRequestStateMap client_request_state_map_;
+
+  ClientRequestStateMap retried_client_request_state_map_;
 
   /// Default query options in the form of TQueryOptions and beeswax::ConfigVariable
   TQueryOptions default_query_options_;
@@ -1257,8 +1269,15 @@ class ImpalaServer : public ImpalaServiceIf,
   inline void MarkSessionInactive(std::shared_ptr<SessionState> session) {
     boost::lock_guard<boost::mutex> l(session->lock);
     DCHECK_GT(session->ref_count, 0);
+    VLOG_QUERY << "ImpalaServer::MarkSessionInactive decrementing ref_count";
     --session->ref_count;
     session->last_accessed_ms = UnixMillis();
+  }
+
+  inline void MarkSessionActive(std::shared_ptr<SessionState> session) {
+    boost::lock_guard<boost::mutex> l(session->lock);
+    VLOG_QUERY << "ImpalaServer::MarkSessionActive incrementing ref_count";
+    ++session->ref_count;
   }
 
   /// Associate the current connection context with the given session in
