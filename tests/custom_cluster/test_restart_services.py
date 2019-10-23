@@ -55,7 +55,8 @@ class TestQueryRetry(CustomClusterTestSuite):
     with open('/tmp/query4.txt', 'r') as tpcds_query4:
       query = tpcds_query4.read()
     assert self.execute_query("use tpcds_parquet").success
-    handle = self.execute_query_async(query)
+    handle = self.execute_query_async(query,
+        query_options={'spool_query_results':'true'})
     self.wait_for_state(handle, self.client.QUERY_STATES['RUNNING'], 60)
     sleep(randint(0,10))
     self.cluster.impalads[2].kill()

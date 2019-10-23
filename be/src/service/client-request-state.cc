@@ -286,9 +286,7 @@ Status ClientRequestState::Exec() {
       return Status(errmsg.str());
   }
 
-  if (async_exec_thread_.get() != nullptr) {
-    UpdateNonErrorExecState(ExecState::PENDING);
-  } else {
+  if (async_exec_thread_.get() == nullptr) {
     UpdateNonErrorExecState(ExecState::RUNNING);
   }
   return Status::OK();
@@ -517,6 +515,7 @@ Status ClientRequestState::ExecAsyncQueryOrDmlRequest(
 }
 
 void ClientRequestState::FinishExecQueryOrDmlRequest() {
+  UpdateNonErrorExecState(ExecState::PENDING);
   DebugActionNoFail(exec_request_->query_options, "CRS_BEFORE_ADMISSION");
 
   DCHECK(exec_env_->admission_controller() != nullptr);
@@ -951,7 +950,8 @@ void ClientRequestState::UpdateNonErrorExecState(ExecState new_state) {
       DCHECK(exec_state_ == ExecState::RETRYING);
       UpdateExecState(new_state);
       VLOG_QUERY << "Setting query status to retried";
-      summary_profile_->AddInfoStringRedacted("Query Status", "Retried: " + query_status_.GetDetail());
+      summary_profile_->AddInfoStringRedacted(
+          "Query Status", "Retried: " + query_status_.GetDetail());
       break;
     default:
       DCHECK(false) << "A non-error state expected but got: " << ExecStateToString(new_state);
@@ -968,7 +968,8 @@ Status ClientRequestState::UpdateQueryStatus(const Status& status) {
       VLOG_QUERY << "scheduling retry of query " << query_id() << GetStackTrace();
       parent_server_->RetryAsync(query_id(), status);
       query_status_ = status;
-      summary_profile_->AddInfoStringRedacted("Query Status", "Retrying: " + query_status_.GetDetail());
+      summary_profile_->AddInfoStringRedacted(
+          "Query Status", "Retrying: " + query_status_.GetDetail());
     } else {
       UpdateExecState(ExecState::ERROR);
       query_status_ = status;
