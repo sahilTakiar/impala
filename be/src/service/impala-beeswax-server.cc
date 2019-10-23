@@ -584,7 +584,9 @@ Status ImpalaServer::FetchInternal(TUniqueId query_id,
   // Check for cancellation or an error.
   VLOG_QUERY << "state for request_state = "
              << request_state->ExecStateToString(request_state->exec_state())
-             << " query_id = " << query_id << "request_state id = " << request_state->query_id();
+             << " query_id = " << query_id
+             << " request_state id = " << request_state->query_id()
+             << " query_status = " << request_state->query_status().GetDetail();
   RETURN_IF_ERROR(request_state->query_status());
 
   // ODBC-190: set Beeswax's Results.columns to work around bug ODBC-190;

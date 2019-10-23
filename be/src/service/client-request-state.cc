@@ -837,6 +837,7 @@ void ClientRequestState::Wait() {
     if (stmt_type() == TStmtType::DDL) {
       DCHECK(catalog_op_type() != TCatalogOpType::DDL || request_result_set_ != nullptr);
     }
+    VLOG_QUERY << "transitioning to FINISHED state";
     UpdateNonErrorExecState(ExecState::FINISHED);
   }
   // UpdateQueryStatus() or UpdateNonErrorExecState() have updated exec_state_.
@@ -961,6 +962,8 @@ Status ClientRequestState::UpdateQueryStatus(const Status& status) {
   // Preserve the first non-ok status
   if (!status.ok() && query_status_.ok()) {
     if (status.IsRetryable() && exec_state_ != ExecState::RETRYING) {
+      DCHECK(exec_state_ == ExecState::PENDING || exec_state_ == ExecState::RUNNING)
+          << "Not expecting state " << ExecStateToString(exec_state_) << GetStackTrace();
       UpdateExecState(ExecState::RETRYING);
       VLOG_QUERY << "scheduling retry of query " << query_id() << GetStackTrace();
       parent_server_->RetryAsync(query_id(), status);
