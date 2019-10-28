@@ -371,6 +371,8 @@ Status FragmentInstanceState::ExecInternal() {
     UpdateState(StateEvent::BATCH_PRODUCED);
     if (VLOG_ROW_IS_ON) row_batch_->VLogRows("FragmentInstanceState::ExecInternal()");
     COUNTER_ADD(rows_produced_counter_, row_batch_->num_rows());
+    VLOG_QUERY << "query_id = " << PrintId(runtime_state_->query_id()) 
+               << " sending num rows " << row_batch_->num_rows();
     RETURN_IF_ERROR(sink_->Send(runtime_state_, row_batch_.get()));
     UpdateState(StateEvent::BATCH_SENT);
   } while (!exec_tree_complete);

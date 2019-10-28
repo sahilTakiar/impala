@@ -1605,9 +1605,14 @@ void ImpalaServer::CancelFromThreadPool(uint32_t thread_id,
       } else {
         active_backends = coord->GetActiveBackends(cancellation_work.failed_backends());
       }
+      stringstream ss;
+      ss << " failed backends = "; 
+      for (auto failed_backend : cancellation_work.failed_backends()) {
+        ss << "addr = " << TNetworkAddressToString(failed_backend);
+      }
       if (active_backends.empty()) {
         VLOG_QUERY << "CancelFromThreadPool(): all failed backends already completed for "
-                   << "query " << PrintId(query_id);
+                   << "query " << PrintId(query_id) << ss.str();
         return;
       }
       stringstream msg;

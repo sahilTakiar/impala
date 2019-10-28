@@ -636,8 +636,15 @@ Status Coordinator::FinalizeHdfsDml() {
 void Coordinator::WaitForBackends() {
   int32_t num_remaining = backend_exec_complete_barrier_->pending();
   if (num_remaining > 0) {
+    stringstream ss;
+    ss << " waiting for backends on ";
+    for (auto backend_state : backend_states_) {
+      if (!backend_state->IsDone()) {
+       ss << "addr = " << backend_state->krpc_impalad_address();
+      }
+    }
     VLOG_QUERY << "Coordinator waiting for backends to finish, " << num_remaining
-               << " remaining. query_id=" << PrintId(query_id());
+               << " remaining. query_id=" << PrintId(query_id()) << ss.str();
     backend_exec_complete_barrier_->Wait();
   }
 }
@@ -670,7 +677,7 @@ Status Coordinator::Wait() {
 
 Status Coordinator::GetNext(QueryResultSet* results, int max_rows, bool* eos,
     int64_t block_on_wait_time_us) {
-  VLOG_ROW << "GetNext() query_id=" << PrintId(query_id());
+  VLOG_QUERY << "GetNext() query_id=" << PrintId(query_id()) << " max_rows = " << max_rows;
   DCHECK(has_called_wait_);
   SCOPED_TIMER(query_profile_->total_time_counter());
 
@@ -699,13 +706,18 @@ Status Coordinator::GetNext(QueryResultSet* results, int max_rows, bool* eos,
   }
 
   Status status = coord_sink_->GetNext(runtime_state, results, max_rows, eos, timeout_us);
+  VLOG_QUERY << "query_id " << PrintId(query_id()) << " fetched rows = "
+             << results->size();
   if (!first_row_fetched_ && results->size() > 0) {
     query_events_->MarkEvent("First row fetched");
     first_row_fetched_ = true;
   }
   RETURN_IF_ERROR(UpdateExecState(
           status, &runtime_state->fragment_instance_id(), FLAGS_hostname));
-  if (*eos) RETURN_IF_ERROR(SetNonErrorTerminalState(ExecState::RETURNED_RESULTS));
+  if (*eos) {
+    VLOG_QUERY << "query_id = " << PrintId(query_id()) << " GetNext returned all rows";
+    RETURN_IF_ERROR(SetNonErrorTerminalState(ExecState::RETURNED_RESULTS));
+  }
   return Status::OK();
 }
 
@@ -759,13 +771,13 @@ Status Coordinator::UpdateBackendExecStatus(const ReportExecStatusRequestPB& req
     if (VLOG_QUERY_IS_ON) {
       // Don't log backend completion if the query has already been cancelled.
       int pending_backends = backend_exec_complete_barrier_->pending();
-      if (pending_backends >= 1) {
+      //if (pending_backends >= 1) {
         VLOG_QUERY << "Backend completed:"
                    << " host=" << TNetworkAddressToString(backend_state->impalad_address())
                    << " remaining=" << pending_backends
                    << " query_id=" << PrintId(query_id());
         BackendState::LogFirstInProgress(backend_states_);
-      }
+      //}
     }
     bool is_fragment_failure;
     TUniqueId failed_instance_id;
@@ -774,7 +786,7 @@ Status Coordinator::UpdateBackendExecStatus(const ReportExecStatusRequestPB& req
       // We may start receiving status reports before all exec rpcs are complete.
       // Can't apply state transition until no more exec rpcs will be sent.
       exec_rpcs_complete_barrier_.Wait();
-     
+
       // Apply blacklist updates before updating the exec state, as the state transition
       // might trigger a retry. The retried query needs to make sure the blacklist has
       // been properly updated before running or it may fail due to the same error that

@@ -189,7 +189,7 @@ void ImpalaServer::fetch(Results& query_results, const QueryHandle& query_handle
       query_id), SQLSTATE_GENERAL_ERROR);
   Status status =
       FetchInternal(query_id, start_over, fetch_size, &query_results);
-  VLOG_ROW << "fetch result: #results=" << query_results.data.size()
+  VLOG_QUERY << "fetch result: #results=" << query_results.data.size()
            << " has_more=" << (query_results.has_more ? "true" : "false");
   if (!status.ok()) {
     VLOG_QUERY << "fetch failed with errror " << status.GetDetail() << " for query "
@@ -197,6 +197,7 @@ void ImpalaServer::fetch(Results& query_results, const QueryHandle& query_handle
     discard_result(UnregisterQuery(query_id, false, &status));
     RaiseBeeswaxException(status.GetDetail(), SQLSTATE_GENERAL_ERROR);
   }
+  VLOG_QUERY << "fetch returned successfully query_id = " << PrintId(query_id);
 }
 
 // TODO: Handle complex types.

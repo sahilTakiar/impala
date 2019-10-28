@@ -81,12 +81,15 @@ class TestQueryRetry(CustomClusterTestSuite):
     self.cluster.impalads[2].kill()
     results1 = self.client.fetch(query, handle1)
     assert results1.success
+    print str(results1.runtime_profile)
     assert len(results1.data) == 8
     results2 = self.client.fetch(query, handle2)
     assert results2.success
+    print str(results2.runtime_profile)
     assert len(results2.data) == 8
     results3 = self.client.fetch(query, handle3)
     assert results3.success
+    print str(results3.runtime_profile)
     assert len(results3.data) == 8
     self.client.close_query(handle1)
     self.client.close_query(handle2)
