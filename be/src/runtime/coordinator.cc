@@ -145,13 +145,14 @@ Status Coordinator::Exec() {
   // set coord_instance_ and coord_sink_
   if (schedule_.GetCoordFragment() != nullptr) {
     // this blocks until all fragment instances have finished their Prepare phase
+    VLOG_QUERY << "Calling GetFInstanceState for query_id = " << PrintId(query_id());
     coord_instance_ = query_state_->GetFInstanceState(query_id());
     if (coord_instance_ == nullptr) {
       // at this point, the query is done with the Prepare phase, and we expect
       // to have a coordinator instance, but coord_instance_ == nullptr,
       // which means we failed before or during Prepare().
       Status query_status = query_state_->WaitForPrepare();
-      DCHECK(!query_status.ok());
+      DCHECK(!query_status.ok()) << "query detail = " << query_status.GetDetail();
       return UpdateExecState(query_status, nullptr, FLAGS_hostname);
     }
     // When GetFInstanceState() returns the coordinator instance, the Prepare phase is
@@ -212,6 +213,7 @@ void Coordinator::InitBackendStates() {
         schedule_, query_ctx(), backend_idx, filter_mode_, entry.second));
     backend_state->Init(fragment_stats_, host_profiles_, obj_pool());
     backend_states_[backend_idx++] = backend_state;
+    VLOG_QUERY << "Running query on be = " << backend_state->krpc_impalad_address();
   }
   backend_resource_state_ =
       obj_pool()->Add(new BackendResourceState(backend_states_, schedule_));
@@ -772,12 +774,11 @@ Status Coordinator::UpdateBackendExecStatus(const ReportExecStatusRequestPB& req
       // We may start receiving status reports before all exec rpcs are complete.
       // Can't apply state transition until no more exec rpcs will be sent.
       exec_rpcs_complete_barrier_.Wait();
-      // Transition the status if we're not already in a terminal state. This won't block
-      // because either this transitions to an ERROR state or the query is already in
-      // a terminal state.
-      discard_result(UpdateExecState(status,
-              is_fragment_failure ? &failed_instance_id : nullptr,
-              TNetworkAddressToString(backend_state->impalad_address())));
+     
+      // Apply blacklist updates before updating the exec state, as the state transition
+      // might trigger a retry. The retried query needs to make sure the blacklist has
+      // been properly updated before running or it may fail due to the same error that
+      // the original query failed.
       VLOG_QUERY << "Got error from UpdateBackendExecStatus " << status.GetDetail();
       if (status.IsRetryable() && status.msg().IsRPCErrorMsg()) {
         for (auto be_state : backend_states_) {
@@ -790,6 +791,13 @@ Status Coordinator::UpdateBackendExecStatus(const ReportExecStatusRequestPB& req
           }
         }
       }
+
+      // Transition the status if we're not already in a terminal state. This won't block
+      // because either this transitions to an ERROR state or the query is already in
+      // a terminal state.
+      discard_result(UpdateExecState(status,
+              is_fragment_failure ? &failed_instance_id : nullptr,
+              TNetworkAddressToString(backend_state->impalad_address())));
     }
     // We've applied all changes from the final status report - notify waiting threads.
     discard_result(backend_exec_complete_barrier_->Notify());

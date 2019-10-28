@@ -823,7 +823,7 @@ void ImpalaServer::ArchiveQuery(const ClientRequestState& query) {
   {
     lock_guard<mutex> l(query_log_lock_);
     // Add record to the beginning of the log, and to the lookup index.
-    VLOG_QUERY << "adding query id " << query.query_id();
+    VLOG_QUERY << "adding query_id " << PrintId(query.query_id());
     query_log_index_[query.query_id()] = query_log_.insert(query_log_.begin(), record);
 
     if (FLAGS_query_log_size > -1 && FLAGS_query_log_size < query_log_.size()) {
@@ -1463,38 +1463,63 @@ void ImpalaServer::RetryAsync(const TUniqueId& query_id, const Status& error) {
 
 void ImpalaServer::RetryQueryFromThreadPool(
     uint32_t thread_id, const RetryWork& retry_work) {
-  VLOG_QUERY << "Retrying query";
+  VLOG_QUERY << "Retrying query " << PrintId(retry_work.query_id());
   const TUniqueId& query_id = retry_work.query_id();
-  shared_ptr<ClientRequestState> request_state = GetClientRequestState(query_id);
+  //shared_ptr<ClientRequestState> request_state = GetClientRequestState(query_id);
+  shared_ptr<ClientRequestState> request_state;
+  {
+    ScopedShardedMapRef<std::shared_ptr<ClientRequestState>> map_ref(
+        query_id, &client_request_state_map_);
+    DCHECK(map_ref.get() != nullptr);
+    auto entry = map_ref->find(query_id);
+    if (entry == map_ref->end()) {
+      DCHECK(false);
+    } else {
+      request_state = entry->second;
+    }
+  }
   // Query was already unregistered.
   DCHECK(request_state != nullptr);
+  {
+    lock_guard<mutex> l(*request_state->lock());
+    DCHECK(request_state->exec_state() == ClientRequestState::ExecState::RETRYING);
+  }
   // Need to lock here because UnregisterQuery removes the ClientRequestState from the map
   // so any attempts to call beeswax methods will fail becaus the state won't be in the
   // map.
-  lock_guard<mutex> l(retry_lock_);
-  request_state->retried_.Notify();
-  Status status = CancelInternal(retry_work.query_id(), true);
+  //Status status = CancelInternal(retry_work.query_id(), true);
+  Status status = request_state->Cancel(true, nullptr);
   DCHECK(status.ok()) << status.GetDetail();
   shared_ptr<ClientRequestState> local_request_state;
   // TODO is all the re-factorign of UnregisterQuery still necessary with the
   // retry_client_resut_map_ in place?
-  status = EraseQueryIdFromClientRequestMap(retry_work.query_id(), &local_request_state);
+  //status = EraseQueryIdFromClientRequestMap(retry_work.query_id(), &local_request_state);
   //UnregisterQuery(retry_work.query_id(), true, &retry_work.error());
   DCHECK(status.ok()) << status.GetDetail();
-  VLOG_QUERY << "Cancelled query";
   // TODO there is a probably a bug somewhere and TQueryCtx is being copied, which is
   // why the Coordinator version works, but not the ClientRequestState one
-  VLOG_QUERY << "Preparing query context";
-  shared_ptr<TExecRequest> retry_exec_request = request_state->exec_request();
+  // TODO this could be a bug, you try to modify the TExecRequest and TQueryCtx from the
+  // retrying query while othe threads may be using it - they may already have a reference
+  // to it.
+  shared_ptr<TExecRequest> retry_exec_request =
+      make_shared<TExecRequest>(*request_state->exec_request());
   const TQueryCtx& query_ctx = retry_exec_request->query_exec_request.query_ctx;
   PrepareQueryContext(&retry_exec_request->query_exec_request.query_ctx);
-  VLOG_QUERY << "Prepared query context";
 
   shared_ptr<ClientRequestState> retry_request_state;
   retry_request_state.reset(new ClientRequestState(query_ctx, exec_env_,
       exec_env_->frontend(), this, request_state->session(), retry_exec_request));
 
-  retry_request_state->retried_id_ = new TUniqueId(request_state->query_id());
+  VLOG_QUERY << "original addr = "
+             << &request_state->exec_request()->query_exec_request.query_ctx
+             << " retry addr = "
+             << &retry_request_state->exec_request()->query_exec_request.query_ctx;
+
+  {
+    lock_guard<mutex> l(*request_state->lock());
+    retry_request_state->retried_id_ = new TUniqueId(request_state->query_id());
+    retry_request_state->was_retried_ = true;
+  }
 
   // We don't set the Frontend timeline since the Frontend code was never invoked.
   retry_request_state->set_user_profile_access(
@@ -1503,7 +1528,8 @@ void ImpalaServer::RetryQueryFromThreadPool(
     retry_request_state->set_result_metadata(retry_exec_request->result_set_metadata);
   }
 
-  VLOG_QUERY << "Re-registering query with new id " << retry_request_state->query_id();
+  VLOG_QUERY << "Re-registering query with new id "
+             << PrintId(retry_request_state->query_id());
   // Essentially, the issue is that we need to use a session with a ref_count that is
   // higher than 0. The issue is that since this is running in a separate thread, the
   // ScopedSessionState that is used in ImpalaBeeswaxServer::query() has gone out of
@@ -1536,13 +1562,19 @@ void ImpalaServer::RetryQueryFromThreadPool(
   request_state->UpdateNonErrorExecState(ClientRequestState::ExecState::RETRIED);
   // TODO there is a bug where calling this method / ArchiveQuery on the original query_id
   // will use the new ClientRequesState, this causes a bug where duplicate entries for
-  // the retried query show up in the profile. The RETRIED query shows up because 
+  // the retried query show up in the profile. The RETRIED query shows up because
   // you call this on the original request_state, but the logic to list out the queries
   // UIs is based purely on the client_request_map_.
-  status = CloseClientRequestState(request_state);//UnregisterQuery(retry_work.query_id(), true, &retry_work.error());
+  // TODO maybe moving this after the call to Exec is problematic, does it really need to
+  // go at the end?
+  status = EraseQueryIdFromClientRequestMap(retry_work.query_id(), &local_request_state);
   DCHECK(status.ok()) << status.GetDetail();
-  VLOG_QUERY << "Unregistered query with id = " << request_state->query_id();
+  status = CloseClientRequestState(request_state);
+  //UnregisterQuery(retry_work.query_id(), true, &retry_work.error());
+  DCHECK(status.ok()) << status.GetDetail();
+  VLOG_QUERY << "Unregistered query with id = " << PrintId(request_state->query_id());
   MarkSessionInactive(request_state->session());
+  request_state->retried_.Notify();
 }
 
 void ImpalaServer::CancelFromThreadPool(uint32_t thread_id,
@@ -1597,12 +1629,23 @@ void ImpalaServer::CancelFromThreadPool(uint32_t thread_id,
                  << ") failed";
     }
   } else {
-    VLOG_QUERY << "CancelFromThreadPool(): retrying query_id=" << PrintId(query_id)
-               << " status=" << error.GetDetail();
     // TODO fix locking
     lock_guard<mutex> l(*request_state->lock());
-    error.SetIsRetryable();
-    discard_result(request_state->UpdateQueryStatus(error));
+    // Only retry a query if it has not already been retried, it is likely (although not
+    // guaranteed), that the query was already retried because of a failed RPC.
+    // TODO could make this more robust by saving the failure status of the original query
+    // and comparing the failed nodes detected vs. the RPC address in the Status
+    if (request_state->was_retried_) {
+      VLOG_QUERY << "CancelFromThreadPool(): should skip retry of query_id= "
+                 << PrintId(query_id) << " because it has already been retried";
+      return;
+    }
+    if (request_state->exec_state() != ClientRequestState::ExecState::FINISHED) {
+      VLOG_QUERY << "CancelFromThreadPool(): retrying query_id=" << PrintId(query_id)
+                 << " status=" << error.GetDetail();
+      error.SetIsRetryable();
+      discard_result(request_state->UpdateQueryStatus(error));
+    }
   }
 }
 
@@ -2660,36 +2703,47 @@ void ImpalaServer::Join() {
 shared_ptr<ClientRequestState> ImpalaServer::GetClientRequestState(
     const TUniqueId& query_id) {
   DCHECK_EQ(this, ExecEnv::GetInstance()->impala_server());
-  ScopedShardedMapRef<std::shared_ptr<ClientRequestState>> map_ref(query_id,
-      &client_request_state_map_);
-  DCHECK(map_ref.get() != nullptr);
-
-  auto entry = map_ref->find(query_id);
-  if (entry == map_ref->end()) {
-    ScopedShardedMapRef<std::shared_ptr<ClientRequestState>> retried_map_ref(
-        query_id, &retried_client_request_state_map_);
+  shared_ptr<ClientRequestState> request_state;
+  {
+    ScopedShardedMapRef<std::shared_ptr<ClientRequestState>> map_ref(
+        query_id, &client_request_state_map_);
     DCHECK(map_ref.get() != nullptr);
-    auto retried_entry = retried_map_ref->find(query_id);
-    if (retried_entry == retried_map_ref->end()) {
-      return shared_ptr<ClientRequestState>();
-    } else {
-      return retried_entry->second;
-    }
-  } else {
-    if (entry->second->exec_state() == ClientRequestState::ExecState::RETRYING
-        || entry->second->exec_state() == ClientRequestState::ExecState::RETRIED) {
+    auto entry = map_ref->find(query_id);
+    if (entry == map_ref->end()) {
       ScopedShardedMapRef<std::shared_ptr<ClientRequestState>> retried_map_ref(
           query_id, &retried_client_request_state_map_);
-      DCHECK(map_ref.get() != nullptr);
+      DCHECK(retried_map_ref.get() != nullptr);
       auto retried_entry = retried_map_ref->find(query_id);
       if (retried_entry == retried_map_ref->end()) {
-        return entry->second;
+        VLOG_QUERY << "Returning empty CRS";
+        return shared_ptr<ClientRequestState>();
       } else {
+        VLOG_QUERY << "Returning CRS from retry map";
         return retried_entry->second;
       }
     } else {
-      return entry->second;
+      request_state = entry->second;
     }
+  }
+  DCHECK(request_state != nullptr);
+  if (request_state->exec_state() == ClientRequestState::ExecState::RETRYING
+      || request_state->exec_state() == ClientRequestState::ExecState::RETRIED) {
+    request_state->retried_.Wait();
+    ScopedShardedMapRef<std::shared_ptr<ClientRequestState>> retried_map_ref(
+        query_id, &retried_client_request_state_map_);
+    DCHECK(retried_map_ref.get() != nullptr);
+    auto retried_entry = retried_map_ref->find(query_id);
+    if (retried_entry == retried_map_ref->end()) {
+      DCHECK(false);
+      VLOG_QUERY << "returning after DCHECK which should be impossible";
+      return request_state;
+    } else {
+      VLOG_QUERY << "returning from retry map after waiting for original to be RETRIED";
+      return retried_entry->second;
+    }
+  } else {
+    VLOG_QUERY << "returning from original map because CRS is not retried or retrying";
+    return request_state;
   }
 }
 

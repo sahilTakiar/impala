@@ -157,14 +157,14 @@ void ControlService::ReportExecStatus(const ReportExecStatusRequestPB* request,
   const TUniqueId query_id = ProtoToQueryId(request->query_id());
   shared_ptr<ClientRequestState> request_state;
   {
-    lock_guard<mutex> l(ExecEnv::GetInstance()->impala_server()->retry_lock_);
     request_state =
         ExecEnv::GetInstance()->impala_server()->GetClientRequestState(query_id);
   }
   // This failpoint is to allow jitter to be injected.
   DebugActionNoFail(FLAGS_debug_actions, "REPORT_EXEC_STATUS_DELAY");
-  if (request_state.get() == nullptr || (request_state->retried_id_ != nullptr
-                                            && *request_state->retried_id_ == query_id)) {
+  if (request_state.get() == nullptr
+      || (request_state->was_retried_ && request_state->retried_id_ != nullptr
+             && *request_state->retried_id_ == query_id)) {
     // This is expected occasionally (since a report RPC might be in flight while
     // cancellation is happening). Return an error to the caller to get it to stop.
     const string& err = Substitute("ReportExecStatus(): Received report for unknown "

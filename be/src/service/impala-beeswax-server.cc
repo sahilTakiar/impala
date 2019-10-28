@@ -177,7 +177,6 @@ void ImpalaServer::fetch(Results& query_results, const QueryHandle& query_handle
 
   shared_ptr<ClientRequestState> request_state;
   {
-    lock_guard<mutex> l(retry_lock_);
     request_state = GetClientRequestState(query_id);
   }
   if (UNLIKELY(request_state == nullptr)) {
@@ -193,7 +192,8 @@ void ImpalaServer::fetch(Results& query_results, const QueryHandle& query_handle
   VLOG_ROW << "fetch result: #results=" << query_results.data.size()
            << " has_more=" << (query_results.has_more ? "true" : "false");
   if (!status.ok()) {
-    VLOG_QUERY << "fetch failed with errror " << status.GetDetail() << " for query " << query_id;
+    VLOG_QUERY << "fetch failed with errror " << status.GetDetail() << " for query "
+               << PrintId(query_id);
     discard_result(UnregisterQuery(query_id, false, &status));
     RaiseBeeswaxException(status.GetDetail(), SQLSTATE_GENERAL_ERROR);
   }
@@ -213,7 +213,6 @@ void ImpalaServer::get_results_metadata(ResultsMetadata& results_metadata,
   VLOG_QUERY << "get_results_metadata(): query_id=" << PrintId(query_id);
   shared_ptr<ClientRequestState> request_state;
   {
-    lock_guard<mutex> l(retry_lock_);
     request_state = GetClientRequestState(query_id);
   }
   if (UNLIKELY(request_state.get() == nullptr)) {
@@ -283,7 +282,6 @@ beeswax::QueryState::type ImpalaServer::get_state(const QueryHandle& handle) {
 
   shared_ptr<ClientRequestState> request_state;
   {
-    lock_guard<mutex> l(retry_lock_);
     request_state = GetClientRequestState(query_id);
   }
   if (UNLIKELY(request_state == nullptr)) {
@@ -325,7 +323,6 @@ void ImpalaServer::get_log(string& log, const LogContextId& context) {
   QueryHandleToTUniqueId(handle, &query_id);
   shared_ptr<ClientRequestState> request_state;
   {
-    lock_guard<mutex> l(retry_lock_);
     request_state = GetClientRequestState(query_id);
   }
   if (request_state.get() == nullptr) {
@@ -558,7 +555,6 @@ Status ImpalaServer::FetchInternal(TUniqueId query_id,
   bool block_on_wait = false;
   do {
     {
-      lock_guard<mutex> l(retry_lock_);
       request_state = GetClientRequestState(query_id);
     }
     block_on_wait = request_state->BlockOnWait(
@@ -570,9 +566,12 @@ Status ImpalaServer::FetchInternal(TUniqueId query_id,
       query_results->__isset.data = false;
       return Status::OK();
     }
+
     // TODO this is essentially busy waiting until the new CRS is setup
   } while (request_state->exec_state() == ClientRequestState::ExecState::RETRYING
       || request_state->exec_state() == ClientRequestState::ExecState::RETRIED);
+
+  // TODO deadlock could occur above if you have double retries
 
   lock_guard<mutex> frl(*request_state->fetch_rows_lock());
   lock_guard<mutex> l(*request_state->lock());
@@ -584,8 +583,8 @@ Status ImpalaServer::FetchInternal(TUniqueId query_id,
   // Check for cancellation or an error.
   VLOG_QUERY << "state for request_state = "
              << request_state->ExecStateToString(request_state->exec_state())
-             << " query_id = " << query_id
-             << " request_state id = " << request_state->query_id()
+             << " query_id = " << PrintId(query_id)
+             << " request_state id = " << PrintId(request_state->query_id())
              << " query_status = " << request_state->query_status().GetDetail();
   RETURN_IF_ERROR(request_state->query_status());
 
@@ -631,7 +630,6 @@ Status ImpalaServer::CloseInsertInternal(SessionState* session, const TUniqueId&
     TDmlResult* dml_result) {
   shared_ptr<ClientRequestState> request_state;
   {
-    lock_guard<mutex> l(retry_lock_);
     request_state = GetClientRequestState(query_id);
   }
   if (UNLIKELY(request_state == nullptr)) {

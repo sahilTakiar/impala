@@ -962,10 +962,17 @@ Status ClientRequestState::UpdateQueryStatus(const Status& status) {
   // Preserve the first non-ok status
   if (!status.ok() && query_status_.ok()) {
     if (status.IsRetryable() && exec_state_ != ExecState::RETRYING) {
-      DCHECK(exec_state_ == ExecState::PENDING || exec_state_ == ExecState::RUNNING)
+      // INITIALIZED is possible incase the cancellation thread pool kills the query while
+      // it is in the INITIALIZATION phase.
+      DCHECK(!was_retried_)
+          << GetStackTrace()
+          << " cannot retry a query that has already been retried query_id = "
+          << PrintId(query_id()) << " retried_id = " << PrintId(*retried_id_);
+      DCHECK(exec_state_ == ExecState::INITIALIZED || exec_state_ == ExecState::PENDING
+          || exec_state_ == ExecState::RUNNING)
           << "Not expecting state " << ExecStateToString(exec_state_) << GetStackTrace();
       UpdateExecState(ExecState::RETRYING);
-      VLOG_QUERY << "scheduling retry of query " << query_id() << GetStackTrace();
+      VLOG_QUERY << "scheduling retry of query " << PrintId(query_id()) << GetStackTrace();
       parent_server_->RetryAsync(query_id(), status);
       query_status_ = status;
       summary_profile_->AddInfoStringRedacted(
@@ -1372,6 +1379,7 @@ void ClientRequestState::ClearResultCache() {
 
 void ClientRequestState::UpdateExecState(ExecState exec_state) {
   exec_state_ = exec_state;
+  VLOG_QUERY << "setting exec_state = " << ExecStateToString(exec_state);
   if (exec_state_ == ExecState::RETRIED || exec_state_ == ExecState::RETRYING) {
     VLOG_QUERY << "setting status to retried of retrying";
     summary_profile_->AddInfoString("Query State", ExecStateToString(exec_state));

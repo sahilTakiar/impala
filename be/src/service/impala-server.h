@@ -622,8 +622,6 @@ class ImpalaServer : public ImpalaServiceIf,
     TQueryOptions QueryOptions();
   };
 
-  boost::mutex retry_lock_;
-
  private:
   struct ExpirationEvent;
   class SecretArg;

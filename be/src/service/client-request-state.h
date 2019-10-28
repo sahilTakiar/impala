@@ -295,6 +295,8 @@ class ClientRequestState {
 
   TUniqueId* retried_id_;
 
+  bool was_retried_ = false;
+
   CountingBarrier retried_;
 
 protected:
