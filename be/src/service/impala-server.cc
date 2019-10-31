@@ -1650,7 +1650,17 @@ void ImpalaServer::CancelFromThreadPool(uint32_t thread_id,
                  << " status=" << error.GetDetail();
       error.SetIsRetryable();
       discard_result(request_state->UpdateQueryStatus(error));
+    } else {
+      VLOG_QUERY << "CancelFromThreadPool(): cancelling query_id=" << PrintId(query_id);
+      Status status = request_state->Cancel(true, &error);
+      if (!status.ok()) {
+        VLOG_QUERY << "Query cancellation (" << PrintId(cancellation_work.query_id())
+                   << ") did not succeed: " << status.GetDetail();
+      }
     }
+    // TODO this is the bug, the query should be cancelled if it is finished and you
+    // detect a failed node otherwise the query will hang waiting for that node to finish
+    // Actually, the real bug is IMPALA-9113, bug this is still necessary anyway.
   }
 }
 
@@ -2778,6 +2788,13 @@ void ImpalaServer::UpdateFilter(TUpdateFilterResult& result,
       GetClientRequestState(params.query_id);
   if (client_request_state.get() == nullptr) {
     LOG(INFO) << "Could not find client request state: " << PrintId(params.query_id);
+    return;
+  }
+  VLOG_QUERY << "got filter for query_id " << PrintId(params.query_id)
+             << " crs query_id = " << PrintId(client_request_state->query_id());
+  if (client_request_state->was_retried_
+      && params.query_id == *client_request_state->retried_id_) {
+    LOG(INFO) << "Got a filter for an old query attempt, skipping";
     return;
   }
   if (client_request_state->exec_state() != ClientRequestState::ExecState::RETRYING
