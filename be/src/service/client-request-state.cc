@@ -836,7 +836,6 @@ void ClientRequestState::Wait() {
     if (stmt_type() == TStmtType::DDL) {
       DCHECK(catalog_op_type() != TCatalogOpType::DDL || request_result_set_ != nullptr);
     }
-    VLOG_QUERY << "transitioning to FINISHED state";
     UpdateNonErrorExecState(ExecState::FINISHED);
   }
   // UpdateQueryStatus() or UpdateNonErrorExecState() have updated exec_state_.
@@ -1313,7 +1312,6 @@ void ClientRequestState::MarkInactive() {
   lock_guard<mutex> l(expiration_data_lock_);
   last_active_time_ms_ = UnixMillis();
   DCHECK(ref_count_ > 0) << "Invalid MarkInactive()";
-  VLOG_QUERY << "ClientRequestState::MarkInactive decrementing ref_count";
   --ref_count_;
 }
 
@@ -1323,7 +1321,6 @@ void ClientRequestState::MarkActive() {
   client_wait_timer_->Set(elapsed_time);
   lock_guard<mutex> l(expiration_data_lock_);
   last_active_time_ms_ = UnixMillis();
-  VLOG_QUERY << "ClientRequestState::MarkActive incrementing ref_count";
   ++ref_count_;
 }
 

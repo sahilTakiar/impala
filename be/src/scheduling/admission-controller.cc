@@ -806,8 +806,6 @@ Status AdmissionController::SubmitForAdmission(const AdmissionRequest& request,
       cluster_membership_mgr_->GetSnapshot();
   DCHECK(membership_snapshot.get() != nullptr);
   string blacklist_str = membership_snapshot->executor_blacklist.BlacklistToString();
-  VLOG_QUERY << "blacklisted executors for query " << PrintId(request.query_id) << " = "
-             << blacklist_str;
   if (!blacklist_str.empty()) {
     request.summary_profile->AddInfoString("Blacklisted Executors", blacklist_str);
   }

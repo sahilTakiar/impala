@@ -293,7 +293,6 @@ FragmentInstanceState* QueryState::GetFInstanceState(const TUniqueId& instance_i
   VLOG_FILE << "GetFInstanceState(): instance_id=" << PrintId(instance_id);
   if (!WaitForPrepare().ok()) return nullptr;
   auto it = fis_map_.find(instance_id);
-  VLOG_QUERY << "WaitForPrepare return successfully, so instance_id " << PrintId(instance_id) << " was not in the fis_map_";
   return it != fis_map_.end() ? it->second : nullptr;
 }
 
@@ -467,7 +466,6 @@ void QueryState::ErrorDuringPrepare(const Status& status, const TUniqueId& finst
   {
     std::unique_lock<SpinLock> l(status_lock_);
     if (!HasErrorStatus()) {
-      VLOG_QUERY << "ErrorDuringPrepare status = " << status.GetDetail();
       overall_status_ = status;
       failed_finstance_id_ = finst_id;
     }
@@ -479,7 +477,6 @@ void QueryState::ErrorDuringExecute(const Status& status, const TUniqueId& finst
   {
     std::unique_lock<SpinLock> l(status_lock_);
     if (!HasErrorStatus()) {
-      VLOG_QUERY << "ErrorDuringExecute status = " << status.GetDetail();
       overall_status_ = status;
       failed_finstance_id_ = finst_id;
     }
@@ -490,7 +487,6 @@ void QueryState::ErrorDuringExecute(const Status& status, const TUniqueId& finst
 Status QueryState::WaitForPrepare() {
   instances_prepared_barrier_->Wait();
   unique_lock<SpinLock> l(status_lock_);
-  VLOG_QUERY << "WaitForPrepare returning " << overall_status_.GetDetail();
   return overall_status_;
 }
 
@@ -583,7 +579,6 @@ error:
     // Prioritize general errors as a query killing error, even over an error
     // during Prepare() for a FIS. Overwrite any existing value in 'overall_status_'.
     std::unique_lock<SpinLock> l(status_lock_);
-    VLOG_QUERY << "StartFInstances status = " << start_finstances_status.GetDetail();
     overall_status_ = start_finstances_status;
     failed_finstance_id_ = TUniqueId();
   }

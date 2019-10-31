@@ -39,7 +39,6 @@
 #include "runtime/timestamp-value.h"
 #include "runtime/types.h"
 #include "scheduling/query-schedule.h"
-//#include "service/client-request-state.h"
 #include "service/query-options.h"
 #include "statestore/statestore-subscriber.h"
 #include "util/condition-variable.h"
@@ -1267,14 +1266,12 @@ class ImpalaServer : public ImpalaServiceIf,
   inline void MarkSessionInactive(std::shared_ptr<SessionState> session) {
     boost::lock_guard<boost::mutex> l(session->lock);
     DCHECK_GT(session->ref_count, 0);
-    VLOG_QUERY << "ImpalaServer::MarkSessionInactive decrementing ref_count";
     --session->ref_count;
     session->last_accessed_ms = UnixMillis();
   }
 
   inline void MarkSessionActive(std::shared_ptr<SessionState> session) {
     boost::lock_guard<boost::mutex> l(session->lock);
-    VLOG_QUERY << "ImpalaServer::MarkSessionActive incrementing ref_count";
     ++session->ref_count;
   }
 

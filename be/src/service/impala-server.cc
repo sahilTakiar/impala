@@ -823,7 +823,6 @@ void ImpalaServer::ArchiveQuery(const ClientRequestState& query) {
   {
     lock_guard<mutex> l(query_log_lock_);
     // Add record to the beginning of the log, and to the lookup index.
-    VLOG_QUERY << "adding query_id " << PrintId(query.query_id());
     query_log_index_[query.query_id()] = query_log_.insert(query_log_.begin(), record);
 
     if (FLAGS_query_log_size > -1 && FLAGS_query_log_size < query_log_.size()) {
@@ -1067,7 +1066,6 @@ Status ImpalaServer::MapQueryIdToClientRequest(const TUniqueId& query_id,
 
 Status ImpalaServer::EraseQueryIdFromClientRequestMap(
     const TUniqueId& query_id, shared_ptr<ClientRequestState>* request_state) {
-  VLOG_QUERY << "Calling EraseQueryIdFromClientRequestMap" << GetStackTrace();
   DCHECK_EQ(this, ExecEnv::GetInstance()->impala_server());
   TUniqueId* retried_query_id = nullptr;
   {
@@ -1183,10 +1181,9 @@ void ImpalaServer::UpdateExecSummary(
       request_state->GetCoordinator()->GetErrorLog());
 }
 
-
 Status ImpalaServer::UnregisterQuery(const TUniqueId& query_id, bool check_inflight,
     const Status* cause) {
-  VLOG_QUERY << "UnregisterQuery(): query_id=" << PrintId(query_id) << GetStackTrace();
+  VLOG_QUERY << "UnregisterQuery(): query_id=" << PrintId(query_id);
   RETURN_IF_ERROR(CancelInternal(query_id, check_inflight, cause));
   shared_ptr<ClientRequestState> request_state;
   RETURN_IF_ERROR(EraseQueryIdFromClientRequestMap(query_id, &request_state));
@@ -1351,7 +1348,6 @@ Status ImpalaServer::GetSessionState(const TUniqueId& session_id, const SecretAr
   // This would require rethinking the locking protocol for 'session_state_map_lock_' -
   // it probably doesn't not need to be held for the full duration of this function.
   if (i == session_state_map_.end() || !secret.Validate(i->second->secret)) {
-    if (i == session_state_map_.end()) VLOG_QUERY << "i == session_state_map_.end()";
     if (i != session_state_map_.end()) {
       // Log invalid attempts to connect. Be careful not to log secret.
       VLOG(1) << "Client tried to connect to session " << PrintId(session_id)
@@ -1378,7 +1374,6 @@ Status ImpalaServer::GetSessionState(const TUniqueId& session_id, const SecretAr
         VLOG(1) << "GetSessionState(): session " << PrintId(session_id) << " is closed.";
         return Status::Expected("Session is closed");
       }
-      VLOG_QUERY << "ImpalaServer::GetSessionState incrementing ref_count";
       ++i->second->ref_count;
     }
     *session_state = i->second;
@@ -1510,11 +1505,6 @@ void ImpalaServer::RetryQueryFromThreadPool(
   retry_request_state.reset(new ClientRequestState(query_ctx, exec_env_,
       exec_env_->frontend(), this, request_state->session(), retry_exec_request));
 
-  VLOG_QUERY << "original addr = "
-             << &request_state->exec_request()->query_exec_request.query_ctx
-             << " retry addr = "
-             << &retry_request_state->exec_request()->query_exec_request.query_ctx;
-
   {
     lock_guard<mutex> l(*request_state->lock());
     retry_request_state->retried_id_ = new TUniqueId(request_state->query_id());
@@ -1605,14 +1595,9 @@ void ImpalaServer::CancelFromThreadPool(uint32_t thread_id,
       } else {
         active_backends = coord->GetActiveBackends(cancellation_work.failed_backends());
       }
-      stringstream ss;
-      ss << " failed backends = "; 
-      for (auto failed_backend : cancellation_work.failed_backends()) {
-        ss << "addr = " << TNetworkAddressToString(failed_backend);
-      }
       if (active_backends.empty()) {
         VLOG_QUERY << "CancelFromThreadPool(): all failed backends already completed for "
-                   << "query " << PrintId(query_id) << ss.str();
+                   << "query " << PrintId(query_id);
         return;
       }
       stringstream msg;
@@ -2730,10 +2715,8 @@ shared_ptr<ClientRequestState> ImpalaServer::GetClientRequestState(
       DCHECK(retried_map_ref.get() != nullptr);
       auto retried_entry = retried_map_ref->find(query_id);
       if (retried_entry == retried_map_ref->end()) {
-        VLOG_QUERY << "Returning empty CRS";
         return shared_ptr<ClientRequestState>();
       } else {
-        VLOG_QUERY << "Returning CRS from retry map";
         return retried_entry->second;
       }
     } else {
@@ -2750,14 +2733,11 @@ shared_ptr<ClientRequestState> ImpalaServer::GetClientRequestState(
     auto retried_entry = retried_map_ref->find(query_id);
     if (retried_entry == retried_map_ref->end()) {
       DCHECK(false);
-      VLOG_QUERY << "returning after DCHECK which should be impossible";
       return request_state;
     } else {
-      VLOG_QUERY << "returning from retry map after waiting for original to be RETRIED";
       return retried_entry->second;
     }
   } else {
-    VLOG_QUERY << "returning from original map because CRS is not retried or retrying";
     return request_state;
   }
 }
@@ -2790,8 +2770,6 @@ void ImpalaServer::UpdateFilter(TUpdateFilterResult& result,
     LOG(INFO) << "Could not find client request state: " << PrintId(params.query_id);
     return;
   }
-  VLOG_QUERY << "got filter for query_id " << PrintId(params.query_id)
-             << " crs query_id = " << PrintId(client_request_state->query_id());
   if (client_request_state->was_retried_
       && params.query_id == *client_request_state->retried_id_) {
     LOG(INFO) << "Got a filter for an old query attempt, skipping";

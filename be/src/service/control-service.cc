@@ -155,11 +155,9 @@ void ControlService::ExecQueryFInstances(const ExecQueryFInstancesRequestPB* req
 void ControlService::ReportExecStatus(const ReportExecStatusRequestPB* request,
     ReportExecStatusResponsePB* response, RpcContext* rpc_context) {
   const TUniqueId query_id = ProtoToQueryId(request->query_id());
-  shared_ptr<ClientRequestState> request_state;
-  {
-    request_state =
-        ExecEnv::GetInstance()->impala_server()->GetClientRequestState(query_id);
-  }
+  shared_ptr<ClientRequestState> request_state =
+      ExecEnv::GetInstance()->impala_server()->GetClientRequestState(query_id);
+
   // This failpoint is to allow jitter to be injected.
   DebugActionNoFail(FLAGS_debug_actions, "REPORT_EXEC_STATUS_DELAY");
   if (request_state.get() == nullptr

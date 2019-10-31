@@ -145,14 +145,13 @@ Status Coordinator::Exec() {
   // set coord_instance_ and coord_sink_
   if (schedule_.GetCoordFragment() != nullptr) {
     // this blocks until all fragment instances have finished their Prepare phase
-    VLOG_QUERY << "Calling GetFInstanceState for query_id = " << PrintId(query_id());
     coord_instance_ = query_state_->GetFInstanceState(query_id());
     if (coord_instance_ == nullptr) {
       // at this point, the query is done with the Prepare phase, and we expect
       // to have a coordinator instance, but coord_instance_ == nullptr,
       // which means we failed before or during Prepare().
       Status query_status = query_state_->WaitForPrepare();
-      DCHECK(!query_status.ok()) << "query detail = " << query_status.GetDetail();
+      DCHECK(!query_status.ok());
       return UpdateExecState(query_status, nullptr, FLAGS_hostname);
     }
     // When GetFInstanceState() returns the coordinator instance, the Prepare phase is
@@ -213,7 +212,6 @@ void Coordinator::InitBackendStates() {
         schedule_, query_ctx(), backend_idx, filter_mode_, entry.second));
     backend_state->Init(fragment_stats_, host_profiles_, obj_pool());
     backend_states_[backend_idx++] = backend_state;
-    VLOG_QUERY << "Running query on be = " << backend_state->krpc_impalad_address();
   }
   backend_resource_state_ =
       obj_pool()->Add(new BackendResourceState(backend_states_, schedule_));
@@ -545,7 +543,7 @@ Status Coordinator::UpdateExecState(const Status& status,
         "ExecState: query id=$0 finstance=$1 on host=$2 ($3 -> $4) status=$5",
         PrintId(query_id()), failed_finst != nullptr ? PrintId(*failed_finst) : "N/A",
         instance_hostname, ExecStateToString(old_state), ExecStateToString(new_state),
-        status.GetDetail()) << GetStackTrace();
+        status.GetDetail());
   }
   // After dropping the lock, apply the state transition (if any) side-effects.
   HandleExecStateTransition(old_state, new_state);
@@ -636,15 +634,8 @@ Status Coordinator::FinalizeHdfsDml() {
 void Coordinator::WaitForBackends() {
   int32_t num_remaining = backend_exec_complete_barrier_->pending();
   if (num_remaining > 0) {
-    stringstream ss;
-    ss << " waiting for backends on ";
-    for (auto backend_state : backend_states_) {
-      if (!backend_state->IsDone()) {
-       ss << "addr = " << backend_state->krpc_impalad_address();
-      }
-    }
     VLOG_QUERY << "Coordinator waiting for backends to finish, " << num_remaining
-               << " remaining. query_id=" << PrintId(query_id()) << ss.str();
+               << " remaining. query_id=" << PrintId(query_id());
     backend_exec_complete_barrier_->Wait();
   }
 }
@@ -677,7 +668,7 @@ Status Coordinator::Wait() {
 
 Status Coordinator::GetNext(QueryResultSet* results, int max_rows, bool* eos,
     int64_t block_on_wait_time_us) {
-  VLOG_QUERY << "GetNext() query_id=" << PrintId(query_id()) << " max_rows = " << max_rows;
+  VLOG_ROW << "GetNext() query_id=" << PrintId(query_id());
   DCHECK(has_called_wait_);
   SCOPED_TIMER(query_profile_->total_time_counter());
 
@@ -706,18 +697,13 @@ Status Coordinator::GetNext(QueryResultSet* results, int max_rows, bool* eos,
   }
 
   Status status = coord_sink_->GetNext(runtime_state, results, max_rows, eos, timeout_us);
-  VLOG_QUERY << "query_id " << PrintId(query_id()) << " fetched rows = "
-             << results->size();
   if (!first_row_fetched_ && results->size() > 0) {
     query_events_->MarkEvent("First row fetched");
     first_row_fetched_ = true;
   }
   RETURN_IF_ERROR(UpdateExecState(
           status, &runtime_state->fragment_instance_id(), FLAGS_hostname));
-  if (*eos) {
-    VLOG_QUERY << "query_id = " << PrintId(query_id()) << " GetNext returned all rows";
-    RETURN_IF_ERROR(SetNonErrorTerminalState(ExecState::RETURNED_RESULTS));
-  }
+  if (*eos) RETURN_IF_ERROR(SetNonErrorTerminalState(ExecState::RETURNED_RESULTS));
   return Status::OK();
 }
 
@@ -771,13 +757,13 @@ Status Coordinator::UpdateBackendExecStatus(const ReportExecStatusRequestPB& req
     if (VLOG_QUERY_IS_ON) {
       // Don't log backend completion if the query has already been cancelled.
       int pending_backends = backend_exec_complete_barrier_->pending();
-      //if (pending_backends >= 1) {
+      if (pending_backends >= 1) {
         VLOG_QUERY << "Backend completed:"
                    << " host=" << TNetworkAddressToString(backend_state->impalad_address())
                    << " remaining=" << pending_backends
                    << " query_id=" << PrintId(query_id());
         BackendState::LogFirstInProgress(backend_states_);
-      //}
+      }
     }
     bool is_fragment_failure;
     TUniqueId failed_instance_id;

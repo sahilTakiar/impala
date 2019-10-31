@@ -453,7 +453,6 @@ void ImpalaHttpHandler::QueryStateHandler(const Webserver::WebRequest& req,
   int64_t num_waiting_queries = 0;
   for (const ImpalaServer::QueryStateRecord& record: sorted_query_records) {
     Value record_json(kObjectType);
-    VLOG_QUERY << "adding query_id to waiting " << record.id;
     QueryStateToJson(record, &record_json, document);
 
     if (record_json["waiting"].GetBool()) ++num_waiting_queries;
@@ -479,7 +478,6 @@ void ImpalaHttpHandler::QueryStateHandler(const Webserver::WebRequest& req,
   {
     lock_guard<mutex> l(server_->query_log_lock_);
     for (const ImpalaServer::QueryStateRecord& log_entry: server_->query_log_) {
-      VLOG_QUERY << "adding query_id to completed list" << PrintId(log_entry.id);
       Value record_json(kObjectType);
       QueryStateToJson(log_entry, &record_json, document);
       completed_queries.PushBack(record_json, document->GetAllocator());

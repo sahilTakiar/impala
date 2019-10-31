@@ -43,8 +43,6 @@ Status BlockingPlanRootSink::Prepare(
 
 Status BlockingPlanRootSink::Send(RuntimeState* state, RowBatch* batch) {
   SCOPED_TIMER(profile()->total_time_counter());
-  VLOG_QUERY << "sending num rows to BlockingPlanRootSink " << batch->num_rows()
-             << " query_id = " << PrintId(state->query_id());
   PlanRootSink::ValidateCollectionSlots(*row_desc_, batch);
   RETURN_IF_ERROR(PlanRootSink::UpdateAndCheckRowsProducedLimit(state, batch));
   int current_batch_row = 0;
@@ -84,8 +82,6 @@ Status BlockingPlanRootSink::Send(RuntimeState* state, RowBatch* batch) {
 Status BlockingPlanRootSink::FlushFinal(RuntimeState* state) {
   SCOPED_TIMER(profile()->total_time_counter());
   unique_lock<mutex> l(lock_);
-  VLOG_QUERY << "query_id = " << PrintId(state->query_id())
-             << " all batches sent calling FlushFinal";
   sender_state_ = SenderState::EOS;
   // All rows have been sent by the producer, so wake up the producer so it can set eos to
   // true.
@@ -157,11 +153,8 @@ Status BlockingPlanRootSink::GetNext(RuntimeState* state, QueryResultSet* result
       }
     }
   }
+
   *eos = sender_state_ == SenderState::EOS;
-  if (*eos) {
-    VLOG_QUERY << "query_id = " << PrintId(state->query_id())
-               << " eos = true";
-  }
   return state->GetQueryStatus();
 }
 }
