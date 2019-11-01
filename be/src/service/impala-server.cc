@@ -1037,6 +1037,8 @@ Status ImpalaServer::RegisterQuery(shared_ptr<SessionState> session_state,
   const TUniqueId& query_id = request_state->query_id();
   RETURN_IF_ERROR(
       MapQueryIdToClientRequest(query_id, request_state, &client_request_state_map_));
+  RETURN_IF_ERROR(
+      MapQueryIdToClientRequest(query_id, request_state, &in_flight_queries_));
   // Metric is decremented in UnregisterQuery().
   ImpaladMetrics::NUM_QUERIES_REGISTERED->Increment(1L);
   VLOG_QUERY << "Registered query query_id=" << PrintId(query_id)
@@ -1193,8 +1195,28 @@ Status ImpalaServer::UnregisterQuery(const TUniqueId& query_id, bool check_infli
 
 Status ImpalaServer::CloseClientRequestState(
     const std::shared_ptr<ClientRequestState>& request_state) {
-  request_state->Done();
+  {
+    ScopedShardedMapRef<std::shared_ptr<ClientRequestState>> map_ref(
+        request_state->query_id(), &client_request_state_map_);
+    DCHECK(map_ref.get() != nullptr);
 
+    auto entry = map_ref->find(request_state->query_id());
+    if (entry == map_ref->end()) {
+      ScopedShardedMapRef<std::shared_ptr<ClientRequestState>> retried_map_ref(
+          request_state->query_id(), &in_flight_queries_);
+      DCHECK(retried_map_ref.get() != nullptr);
+      auto retried_entry = retried_map_ref->find(request_state->query_id());
+      if (retried_entry == retried_map_ref->end()) {
+        VLOG(1) << "Invalid or unknown query handle "
+                << PrintId(request_state->query_id()) << GetStackTrace();
+        return Status::Expected("Invalid or unknown query handle");
+      } else {
+        retried_map_ref->erase(retried_entry);
+      }
+    }
+  }
+  request_state->Done();
+  request_state->query_id();
   int64_t duration_us = request_state->end_time_us() - request_state->start_time_us();
   int64_t duration_ms = duration_us / MICROS_PER_MILLI;
 
@@ -1233,6 +1255,7 @@ Status ImpalaServer::CloseClientRequestState(
       }
     }
   }
+
   ArchiveQuery(*request_state);
   ImpaladMetrics::NUM_QUERIES_REGISTERED->Increment(-1L);
   return Status::OK();

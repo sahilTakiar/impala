@@ -1100,6 +1100,8 @@ class ImpalaServer : public ImpalaServiceIf,
 
   ClientRequestStateMap retried_client_request_state_map_;
 
+  ClientRequestStateMap in_flight_queries_;
+
   /// Default query options in the form of TQueryOptions and beeswax::ConfigVariable
   TQueryOptions default_query_options_;
   std::vector<beeswax::ConfigVariable> default_configs_;

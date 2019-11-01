@@ -321,7 +321,7 @@ void ImpalaHttpHandler::QueryProfileJsonHandler(const Webserver::WebRequest& req
 void ImpalaHttpHandler::InflightQueryIdsHandler(const Webserver::WebRequest& req,
     Document* document) {
   stringstream ss;
-  server_->client_request_state_map_.DoFuncForAllEntries(
+  server_->in_flight_queries_.DoFuncForAllEntries(
       [&](const std::shared_ptr<ClientRequestState>& request_state) {
           ss << PrintId(request_state->query_id()) << "\n";
       });
@@ -444,7 +444,7 @@ void ImpalaHttpHandler::QueryStateHandler(const Webserver::WebRequest& req,
   set<ImpalaServer::QueryStateRecord, ImpalaServer::QueryStateRecordLessThan>
       sorted_query_records;
 
-  server_->client_request_state_map_.DoFuncForAllEntries(
+  server_->in_flight_queries_.DoFuncForAllEntries(
       [&](const std::shared_ptr<ClientRequestState>& request_state) {
           sorted_query_records.insert(ImpalaServer::QueryStateRecord(*request_state));
       });
@@ -990,7 +990,7 @@ void ImpalaHttpHandler::AdmissionStateHandler(
     unsigned long num_backends;
   };
   unordered_map<string, vector<QueryInfo>> running_queries;
-  server_->client_request_state_map_.DoFuncForAllEntries([&running_queries](
+  server_->in_flight_queries_.DoFuncForAllEntries([&running_queries](
       const std::shared_ptr<ClientRequestState>& request_state) {
     // Make sure only queries past admission control are added.
     auto query_state = request_state->operation_state();
