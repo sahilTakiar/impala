@@ -1098,8 +1098,6 @@ class ImpalaServer : public ImpalaServiceIf,
   /// as a shared_ptr to allow asynchronous deletion
   ClientRequestStateMap client_request_state_map_;
 
-  ClientRequestStateMap retried_client_request_state_map_;
-
   ClientRequestStateMap in_flight_queries_;
 
   /// Default query options in the form of TQueryOptions and beeswax::ConfigVariable

@@ -1378,7 +1378,6 @@ void ClientRequestState::UpdateExecState(ExecState exec_state) {
   exec_state_ = exec_state;
   VLOG_QUERY << "setting exec_state = " << ExecStateToString(exec_state);
   if (exec_state_ == ExecState::RETRIED || exec_state_ == ExecState::RETRYING) {
-    VLOG_QUERY << "setting status to retried of retrying";
     summary_profile_->AddInfoString("Query State", ExecStateToString(exec_state));
   } else {
     summary_profile_->AddInfoString("Query State", PrintThriftEnum(BeeswaxQueryState()));

@@ -270,7 +270,7 @@ beeswax::QueryState::type ImpalaServer::get_state(const QueryHandle& handle) {
       ThriftServer::GetThreadConnectionId(), &session), SQLSTATE_GENERAL_ERROR);
   TUniqueId query_id;
   QueryHandleToTUniqueId(handle, &query_id);
-  VLOG_ROW << "get_state(): query_id=" << PrintId(query_id);
+  VLOG_QUERY << "get_state(): query_id=" << PrintId(query_id);
 
   shared_ptr<ClientRequestState> request_state = GetClientRequestState(query_id);
   if (UNLIKELY(request_state == nullptr)) {

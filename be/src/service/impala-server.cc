@@ -1058,10 +1058,15 @@ Status ImpalaServer::MapQueryIdToClientRequest(const TUniqueId& query_id,
   if (entry != map_ref->end()) {
     // There shouldn't be an active query with that same id.
     // (query_id is globally unique)
-    stringstream ss;
-    ss << "query id " << PrintId(query_id) << " already exists";
-    return Status(ErrorMsg(TErrorCode::INTERNAL_ERROR, ss.str()));
+    //stringstream ss;
+    //ss << "query id " << PrintId(query_id) << " already exists";
+    //return Status(ErrorMsg(TErrorCode::INTERNAL_ERROR, ss.str()));
+    // TODO this can happen when replacing the CRS of the failed query_id
+    // with the CRS of the retried one
+    map_ref->erase(entry);
+    VLOG_QUERY << "Erasing CRS for query_id = " << PrintId(query_id) << GetStackTrace();
   }
+  VLOG_QUERY << "Inserting CRS for query_id = " << PrintId(query_id) << GetStackTrace();
   map_ref->insert(make_pair(query_id, request_state));
   return Status::OK();
 }
@@ -1069,45 +1074,19 @@ Status ImpalaServer::MapQueryIdToClientRequest(const TUniqueId& query_id,
 Status ImpalaServer::EraseQueryIdFromClientRequestMap(
     const TUniqueId& query_id, shared_ptr<ClientRequestState>* request_state) {
   DCHECK_EQ(this, ExecEnv::GetInstance()->impala_server());
-  TUniqueId* retried_query_id = nullptr;
-  {
-    ScopedShardedMapRef<std::shared_ptr<ClientRequestState>> map_ref(
-        query_id, &client_request_state_map_);
-    DCHECK(map_ref.get() != nullptr);
+  ScopedShardedMapRef<std::shared_ptr<ClientRequestState>> map_ref(
+      query_id, &client_request_state_map_);
+  DCHECK(map_ref.get() != nullptr);
 
-    auto entry = map_ref->find(query_id);
-    if (entry == map_ref->end()) {
-      ScopedShardedMapRef<std::shared_ptr<ClientRequestState>> retried_map_ref(
-          query_id, &retried_client_request_state_map_);
-      DCHECK(retried_map_ref.get() != nullptr);
-      auto retried_entry = retried_map_ref->find(query_id);
-      if (retried_entry == retried_map_ref->end()) {
-        VLOG(1) << "Invalid or unknown query handle " << PrintId(query_id)
-                << GetStackTrace();
-        return Status::Expected("Invalid or unknown query handle");
-      } else {
-        *request_state = retried_entry->second;
-        DCHECK(*request_state != nullptr);
-        VLOG_QUERY << "EraseQueryIdFromClientRequestMap points to " << &**request_state;
-        retried_map_ref->erase(retried_entry);
-        retried_query_id = new TUniqueId((*request_state)->query_id());
-      }
-    } else {
-      *request_state = entry->second;
-      DCHECK(*request_state != nullptr);
-      VLOG_QUERY << "EraseQueryIdFromClientRequestMap points to " << &**request_state;
-      map_ref->erase(entry);
-    }
+  auto entry = map_ref->find(query_id);
+  if (entry == map_ref->end()) {
+    VLOG(1) << "Invalid or unknown query handle " << PrintId(query_id) << GetStackTrace();
+    return Status::Expected("Invalid or unknown query handle");
+  } else {
+    *request_state = entry->second;
   }
-  if (retried_query_id) {
-    shared_ptr<ClientRequestState> retried_request_state;
-    RETURN_IF_ERROR(
-        EraseQueryIdFromClientRequestMap(*retried_query_id, &retried_request_state));
-    DCHECK(retried_request_state != nullptr);
-    VLOG_QUERY << "EraseQueryIdFromClientRequestMap points to " << &*retried_request_state;
-  }
-  DCHECK(*request_state != nullptr);
-  VLOG_QUERY << "EraseQueryIdFromClientRequestMap points to " << &**request_state;
+  VLOG_QUERY << "Erasing CRS for query_id = " << PrintId(query_id) << GetStackTrace();
+  map_ref->erase(entry);
   return Status::OK();
 }
 
@@ -1197,22 +1176,16 @@ Status ImpalaServer::CloseClientRequestState(
     const std::shared_ptr<ClientRequestState>& request_state) {
   {
     ScopedShardedMapRef<std::shared_ptr<ClientRequestState>> map_ref(
-        request_state->query_id(), &client_request_state_map_);
+        request_state->query_id(), &in_flight_queries_);
     DCHECK(map_ref.get() != nullptr);
 
     auto entry = map_ref->find(request_state->query_id());
     if (entry == map_ref->end()) {
-      ScopedShardedMapRef<std::shared_ptr<ClientRequestState>> retried_map_ref(
-          request_state->query_id(), &in_flight_queries_);
-      DCHECK(retried_map_ref.get() != nullptr);
-      auto retried_entry = retried_map_ref->find(request_state->query_id());
-      if (retried_entry == retried_map_ref->end()) {
-        VLOG(1) << "Invalid or unknown query handle "
-                << PrintId(request_state->query_id()) << GetStackTrace();
-        return Status::Expected("Invalid or unknown query handle");
-      } else {
-        retried_map_ref->erase(retried_entry);
-      }
+      VLOG(1) << "Invalid or unknown query handle " << PrintId(request_state->query_id())
+              << GetStackTrace();
+      return Status::Expected("Invalid or unknown query handle");
+    } else {
+      map_ref->erase(entry);
     }
   }
   request_state->Done();
@@ -1303,6 +1276,8 @@ Status ImpalaServer::CancelInternal(const TUniqueId& query_id, bool check_inflig
   VLOG_QUERY << "Cancel(): query_id=" << PrintId(query_id);
   shared_ptr<ClientRequestState> request_state = GetClientRequestState(query_id);
   if (request_state == nullptr) {
+      VLOG(1) << "Invalid or unknown query handle " << PrintId(query_id)
+              << GetStackTrace();
     return Status::Expected("Invalid or unknown query handle");
   }
   RETURN_IF_ERROR(request_state->Cancel(check_inflight, cause));
@@ -1557,12 +1532,6 @@ void ImpalaServer::RetryQueryFromThreadPool(
   status = RegisterQuery(request_state->session(), retry_request_state);
   DCHECK(status.ok()) << status.GetDetail();
 
-  // Associate the old query_id with the new ClientRequestState so that existing
-  // QueryHandles still work
-  status = MapQueryIdToClientRequest(
-      query_id, retry_request_state, &retried_client_request_state_map_);
-  DCHECK(status.ok());
-
   VLOG_QUERY << "Calling ClientRequestState::Exec";
   status = retry_request_state->Exec();
   DCHECK(status.ok()) << status.GetDetail();
@@ -1571,6 +1540,13 @@ void ImpalaServer::RetryQueryFromThreadPool(
   DCHECK(status.ok());
   status = SetQueryInflight(request_state->session(), retry_request_state);
   DCHECK(status.ok()) << status.GetDetail();
+  
+  // Associate the old query_id with the new ClientRequestState so that existing
+  // QueryHandles still work
+  status = MapQueryIdToClientRequest(
+      query_id, retry_request_state, &client_request_state_map_);
+  DCHECK(status.ok());
+  
   VLOG_QUERY << "UpdateNonErrorExecState setting to RETRIED";
   request_state->UpdateNonErrorExecState(ClientRequestState::ExecState::RETRIED);
   // TODO there is a bug where calling this method / ArchiveQuery on the original query_id
@@ -1580,7 +1556,7 @@ void ImpalaServer::RetryQueryFromThreadPool(
   // UIs is based purely on the client_request_map_.
   // TODO maybe moving this after the call to Exec is problematic, does it really need to
   // go at the end?
-  status = EraseQueryIdFromClientRequestMap(retry_work.query_id(), &local_request_state);
+  //status = EraseQueryIdFromClientRequestMap(retry_work.query_id(), &local_request_state);
   DCHECK(status.ok()) << status.GetDetail();
   status = CloseClientRequestState(request_state);
   //UnregisterQuery(retry_work.query_id(), true, &retry_work.error());
@@ -2726,42 +2702,15 @@ void ImpalaServer::Join() {
 shared_ptr<ClientRequestState> ImpalaServer::GetClientRequestState(
     const TUniqueId& query_id) {
   DCHECK_EQ(this, ExecEnv::GetInstance()->impala_server());
-  shared_ptr<ClientRequestState> request_state;
-  {
-    ScopedShardedMapRef<std::shared_ptr<ClientRequestState>> map_ref(
-        query_id, &client_request_state_map_);
-    DCHECK(map_ref.get() != nullptr);
-    auto entry = map_ref->find(query_id);
-    if (entry == map_ref->end()) {
-      ScopedShardedMapRef<std::shared_ptr<ClientRequestState>> retried_map_ref(
-          query_id, &retried_client_request_state_map_);
-      DCHECK(retried_map_ref.get() != nullptr);
-      auto retried_entry = retried_map_ref->find(query_id);
-      if (retried_entry == retried_map_ref->end()) {
-        return shared_ptr<ClientRequestState>();
-      } else {
-        return retried_entry->second;
-      }
-    } else {
-      request_state = entry->second;
-    }
-  }
-  DCHECK(request_state != nullptr);
-  if (request_state->exec_state() == ClientRequestState::ExecState::RETRYING
-      || request_state->exec_state() == ClientRequestState::ExecState::RETRIED) {
-    request_state->retried_.Wait();
-    ScopedShardedMapRef<std::shared_ptr<ClientRequestState>> retried_map_ref(
-        query_id, &retried_client_request_state_map_);
-    DCHECK(retried_map_ref.get() != nullptr);
-    auto retried_entry = retried_map_ref->find(query_id);
-    if (retried_entry == retried_map_ref->end()) {
-      DCHECK(false);
-      return request_state;
-    } else {
-      return retried_entry->second;
-    }
+  ScopedShardedMapRef<std::shared_ptr<ClientRequestState>> map_ref(query_id,
+      &client_request_state_map_);
+  DCHECK(map_ref.get() != nullptr);
+
+  auto entry = map_ref->find(query_id);
+  if (entry == map_ref->end()) {
+    return shared_ptr<ClientRequestState>();
   } else {
-    return request_state;
+    return entry->second;
   }
 }
 
