@@ -621,4 +621,5 @@ protected:
   /// Grabs lock_ for polling the query_status(). Hence do not call it under lock_.
   void LogQueryEvents();
 };
+
 }

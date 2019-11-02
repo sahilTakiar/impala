@@ -1064,9 +1064,7 @@ Status ImpalaServer::MapQueryIdToClientRequest(const TUniqueId& query_id,
     // TODO this can happen when replacing the CRS of the failed query_id
     // with the CRS of the retried one
     map_ref->erase(entry);
-    VLOG_QUERY << "Erasing CRS for query_id = " << PrintId(query_id) << GetStackTrace();
   }
-  VLOG_QUERY << "Inserting CRS for query_id = " << PrintId(query_id) << GetStackTrace();
   map_ref->insert(make_pair(query_id, request_state));
   return Status::OK();
 }
@@ -1085,7 +1083,6 @@ Status ImpalaServer::EraseQueryIdFromClientRequestMap(
   } else {
     *request_state = entry->second;
   }
-  VLOG_QUERY << "Erasing CRS for query_id = " << PrintId(query_id) << GetStackTrace();
   map_ref->erase(entry);
   return Status::OK();
 }
@@ -1189,7 +1186,6 @@ Status ImpalaServer::CloseClientRequestState(
     }
   }
   request_state->Done();
-  request_state->query_id();
   int64_t duration_us = request_state->end_time_us() - request_state->start_time_us();
   int64_t duration_ms = duration_us / MICROS_PER_MILLI;
 
@@ -1276,8 +1272,7 @@ Status ImpalaServer::CancelInternal(const TUniqueId& query_id, bool check_inflig
   VLOG_QUERY << "Cancel(): query_id=" << PrintId(query_id);
   shared_ptr<ClientRequestState> request_state = GetClientRequestState(query_id);
   if (request_state == nullptr) {
-      VLOG(1) << "Invalid or unknown query handle " << PrintId(query_id)
-              << GetStackTrace();
+    VLOG(1) << "Invalid or unknown query handle " << PrintId(query_id) << GetStackTrace();
     return Status::Expected("Invalid or unknown query handle");
   }
   RETURN_IF_ERROR(request_state->Cancel(check_inflight, cause));
@@ -1540,13 +1535,13 @@ void ImpalaServer::RetryQueryFromThreadPool(
   DCHECK(status.ok());
   status = SetQueryInflight(request_state->session(), retry_request_state);
   DCHECK(status.ok()) << status.GetDetail();
-  
+
   // Associate the old query_id with the new ClientRequestState so that existing
   // QueryHandles still work
   status = MapQueryIdToClientRequest(
       query_id, retry_request_state, &client_request_state_map_);
   DCHECK(status.ok());
-  
+
   VLOG_QUERY << "UpdateNonErrorExecState setting to RETRIED";
   request_state->UpdateNonErrorExecState(ClientRequestState::ExecState::RETRIED);
   // TODO there is a bug where calling this method / ArchiveQuery on the original query_id

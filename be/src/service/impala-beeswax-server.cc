@@ -173,7 +173,7 @@ void ImpalaServer::fetch(Results& query_results, const QueryHandle& query_handle
 
   TUniqueId query_id;
   QueryHandleToTUniqueId(query_handle, &query_id);
-  VLOG_QUERY << "fetch(): query_id=" << PrintId(query_id) << " fetch_size=" << fetch_size;
+  VLOG_ROW << "fetch(): query_id=" << PrintId(query_id) << " fetch_size=" << fetch_size;
 
   shared_ptr<ClientRequestState> request_state = GetClientRequestState(query_id);
   if (UNLIKELY(request_state == nullptr)) {
@@ -186,7 +186,7 @@ void ImpalaServer::fetch(Results& query_results, const QueryHandle& query_handle
       query_id), SQLSTATE_GENERAL_ERROR);
   Status status =
       FetchInternal(query_id, start_over, fetch_size, &query_results);
-  VLOG_QUERY << "fetch result: #results=" << query_results.data.size()
+  VLOG_ROW << "fetch result: #results=" << query_results.data.size()
            << " has_more=" << (query_results.has_more ? "true" : "false");
   if (!status.ok()) {
     discard_result(UnregisterQuery(query_id, false, &status));
@@ -270,7 +270,7 @@ beeswax::QueryState::type ImpalaServer::get_state(const QueryHandle& handle) {
       ThriftServer::GetThreadConnectionId(), &session), SQLSTATE_GENERAL_ERROR);
   TUniqueId query_id;
   QueryHandleToTUniqueId(handle, &query_id);
-  VLOG_QUERY << "get_state(): query_id=" << PrintId(query_id);
+  VLOG_ROW << "get_state(): query_id=" << PrintId(query_id);
 
   shared_ptr<ClientRequestState> request_state = GetClientRequestState(query_id);
   if (UNLIKELY(request_state == nullptr)) {
