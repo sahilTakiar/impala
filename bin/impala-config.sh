@@ -483,14 +483,6 @@ elif [ "${TARGET_FILESYSTEM}" = "adls" ]; then
 elif [ "${TARGET_FILESYSTEM}" = "abfs" ]; then
   # ABFS is also known as ADLS Gen2, and they can share credentials
   # Basic error checking
-  if [[ "${azure_client_id}" = "DummyAdlsClientId" ||\
-        "${azure_tenant_id}" = "DummyAdlsTenantId" ||\
-        "${azure_client_secret}" = "DummyAdlsClientSecret" ]]; then
-    echo "All 3 of the following need to be assigned valid values and belong
-      to the owner of the Azure storage account in order to access the
-      filesystem: azure_client_id, azure_tenant_id, azure_client_secret."
-    return 1
-  fi
   if [[ "${azure_storage_account_name}" = "" ]]; then
     echo "azure_storage_account_name cannot be an empty string for ABFS"
     return 1

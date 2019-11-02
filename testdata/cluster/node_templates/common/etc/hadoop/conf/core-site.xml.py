@@ -78,13 +78,9 @@ CONFIG = {
   # ABFS configuration
   # Note: This is needed even when not running on ABFS for the same reason as for ADLS.
   # See ExplainTest.testScanNodeFsScheme().
-  'fs.azure.account.auth.type': 'OAuth',
-  'fs.azure.account.oauth.provider.type':
-    'org.apache.hadoop.fs.azurebfs.oauth2.ClientCredsTokenProvider',
-  'fs.azure.account.oauth2.client.id': '${azure_client_id}',
-  'fs.azure.account.oauth2.client.secret': '${azure_client_secret}',
-  'fs.azure.account.oauth2.client.endpoint':
-    'https://login.microsoftonline.com/${azure_tenant_id}/oauth2/token',
+  'fs.azure.account.auth.type.impalaperf.dfs.core.windows.net': 'SharedKey',
+  'fs.azure.account.key.impalaperf.dfs.core.windows.net': 'TA+txnScNObC4vdEdDcvJjwQ1qiqLshJCX0XYR9W2civUonOPxROBKjGkszsrGIxaFey9yRxWc7iKGfi7qUZKw==',
+  'fs.azure.ssl.channel.mode': 'OpenSSL',
 
   # This property can be used in tests to ascertain that this core-site.xml from
   # the classpath has been loaded. (Ex: TestRequestPoolService)
