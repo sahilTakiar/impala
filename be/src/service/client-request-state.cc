@@ -839,7 +839,6 @@ void ClientRequestState::Wait() {
     UpdateNonErrorExecState(ExecState::FINISHED);
   }
   // UpdateQueryStatus() or UpdateNonErrorExecState() have updated exec_state_.
-  // TODO revisit this check
   DCHECK(exec_state_ == ExecState::FINISHED || exec_state_ == ExecState::ERROR
       || exec_state_ == ExecState::RETRYING || exec_state_ == ExecState::RETRIED);
   // Notify all the threads blocked on Wait() to finish and then log the query events,
@@ -1131,7 +1130,6 @@ Status ClientRequestState::Cancel(bool check_inflight, const Status* cause) {
       DCHECK(!cause->ok());
       discard_result(UpdateQueryStatus(*cause));
       query_events_->MarkEvent("Cancelled");
-      // TODO revisit this check
       DCHECK(exec_state_ == ExecState::ERROR || exec_state_ == ExecState::RETRYING
           || exec_state_ == ExecState::RETRIED);
     }
@@ -1375,6 +1373,7 @@ void ClientRequestState::ClearResultCache() {
 }
 
 void ClientRequestState::UpdateExecState(ExecState exec_state) {
+  if (exec_state == ExecState::RETRYING) retry_exec_state_ = exec_state_;
   exec_state_ = exec_state;
   VLOG_QUERY << "setting exec_state = " << ExecStateToString(exec_state);
   if (exec_state_ == ExecState::RETRIED || exec_state_ == ExecState::RETRYING) {
@@ -1385,15 +1384,27 @@ void ClientRequestState::UpdateExecState(ExecState exec_state) {
 }
 
 beeswax::QueryState::type ClientRequestState::BeeswaxQueryState() const {
-  switch (exec_state_) {
+  return ExecStateToBeeswaxQueryState(exec_state_);
+}
+
+TOperationState::type ClientRequestState::operation_state() const {
+  return ExecStateToOperationState(exec_state_);
+}
+
+beeswax::QueryState::type ClientRequestState::ExecStateToBeeswaxQueryState(
+    ExecState exec_state) const {
+  switch (exec_state) {
     case ExecState::INITIALIZED: return beeswax::QueryState::CREATED;
     case ExecState::PENDING: return beeswax::QueryState::COMPILED;
     case ExecState::RUNNING: return beeswax::QueryState::RUNNING;
     case ExecState::FINISHED: return beeswax::QueryState::FINISHED;
     case ExecState::ERROR: return beeswax::QueryState::EXCEPTION;
-    // TODO not sure if this is the right thing to do
-    case ExecState::RETRYING: return beeswax::QueryState::RUNNING;
-    case ExecState::RETRIED: return beeswax::QueryState::RUNNING;
+    case ExecState::RETRYING: 
+    case ExecState::RETRIED:
+      // Return the last known QueryState prior to entering the RETRYING state.
+      DCHECK(retry_exec_state_ != ExecState::RETRIED
+          && retry_exec_state_ != ExecState::RETRYING);
+      return ExecStateToBeeswaxQueryState(retry_exec_state_);
     default: {
       DCHECK(false) << "Add explicit translation for all used TOperationState values";
       return beeswax::QueryState::EXCEPTION;
@@ -1401,16 +1412,20 @@ beeswax::QueryState::type ClientRequestState::BeeswaxQueryState() const {
   }
 }
 
-TOperationState::type ClientRequestState::operation_state() const {
- switch (exec_state_) {
+apache::hive::service::cli::thrift::TOperationState::type
+ClientRequestState::ExecStateToOperationState(ExecState exec_state) const {
+  switch (exec_state_) {
     case ExecState::INITIALIZED: return TOperationState::INITIALIZED_STATE;
     case ExecState::PENDING: return TOperationState::PENDING_STATE;
     case ExecState::RUNNING: return TOperationState::RUNNING_STATE;
     case ExecState::FINISHED: return TOperationState::FINISHED_STATE;
     case ExecState::ERROR: return TOperationState::ERROR_STATE;
-    // TODO not sure if this is the right thing to do
-    case ExecState::RETRYING: return TOperationState::RUNNING_STATE;
-    case ExecState::RETRIED: return TOperationState::RUNNING_STATE;
+    case ExecState::RETRYING: 
+    case ExecState::RETRIED:
+      // Return the last known QueryState prior to entering the RETRYING state.
+      DCHECK(retry_exec_state_ != ExecState::RETRIED
+          && retry_exec_state_ != ExecState::RETRYING);
+      return ExecStateToOperationState(retry_exec_state_);
     default: {
       DCHECK(false) << "Add explicit translation for all used TOperationState values";
       return TOperationState::ERROR_STATE;

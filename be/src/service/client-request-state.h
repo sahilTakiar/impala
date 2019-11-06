@@ -71,7 +71,7 @@ class ClientRequestState {
   ~ClientRequestState();
 
   enum class ExecState {
-    INITIALIZED, PENDING, RUNNING, FINISHED, ERROR, RETRYING, RETRIED
+    INITIALIZED, PENDING, RUNNING, FINISHED, ERROR, RETRYING, RETRIED, UNKNOWN
   };
 
   /// Sets the profile that is produced by the frontend. The frontend creates the
@@ -460,6 +460,9 @@ protected:
 
   enum ExecState exec_state_ = ExecState::INITIALIZED;
 
+  // The ExecState of the query before it entered into the RETRYING state.
+  enum ExecState retry_exec_state_ = ExecState::UNKNOWN;
+
   /// We enforce the invariant that query_status_ is not OK iff operation_state_ is
   /// ERROR_STATE, given that lock_ is held. operation_state_ should only be updated
   /// using UpdateExecState(), to ensure that the query profile is also updated.
@@ -620,6 +623,10 @@ protected:
   /// Logs audit and column lineage events. Expects that Wait() has already finished.
   /// Grabs lock_ for polling the query_status(). Hence do not call it under lock_.
   void LogQueryEvents();
-};
 
+  beeswax::QueryState::type ExecStateToBeeswaxQueryState(ExecState exec_state) const;
+
+  apache::hive::service::cli::thrift::TOperationState::type ExecStateToOperationState(
+      ExecState exec_state) const;
+};
 }

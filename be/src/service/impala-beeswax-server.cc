@@ -551,8 +551,13 @@ Status ImpalaServer::FetchInternal(TUniqueId query_id,
       query_results->__isset.data = false;
       return Status::OK();
     }
-
-    // TODO this is essentially busy waiting until the new CRS is setup
+    if (request_state->exec_state() == ClientRequestState::ExecState::RETRYING
+        || request_state->exec_state() == ClientRequestState::ExecState::RETRIED) {
+      request_state->retried_.Wait();
+    }
+    // TODO do you need the request state lock when reading these? I think you do, but a
+    // bunch of other classes don't do this so might be a systemic problem - consider
+    // using an atomicenum or acquiring the lock before every read.
   } while (request_state->exec_state() == ClientRequestState::ExecState::RETRYING
       || request_state->exec_state() == ClientRequestState::ExecState::RETRIED);
 
