@@ -17,16 +17,16 @@
 
 from collections import defaultdict
 from datetime import datetime
-from tests.common.impala_cluster import ImpalaCluster
+from tests.beeswax.impala_beeswax import ImpalaBeeswaxException
 from tests.common.impala_test_suite import ImpalaTestSuite
 from tests.common.skip import (SkipIfS3, SkipIfABFS, SkipIfADLS, SkipIfIsilon,
                                SkipIfLocal, SkipIfNotHdfsMinicluster)
 from tests.util.filesystem_utils import IS_EC
-from time import sleep, time
+from time import sleep
 from RuntimeProfile.ttypes import TRuntimeProfileFormat
-import logging
 import pytest
 import re
+
 
 class TestObservability(ImpalaTestSuite):
   @classmethod
@@ -157,27 +157,6 @@ class TestObservability(ImpalaTestSuite):
     assert result.exec_summary[0]['est_num_rows'] == -1
     assert result.exec_summary[0]['peak_mem'] >= 0
     assert result.exec_summary[0]['est_peak_mem'] >= 0
-
-  def test_query_states(self):
-    """Tests that the query profile shows expected query states."""
-    query = "select count(*) from functional.alltypes"
-    handle = self.execute_query_async(query,
-        {"debug_action": "CRS_BEFORE_ADMISSION:SLEEP@1000"})
-    # If ExecuteStatement() has completed and the query is paused in the admission control
-    # phase, then the query must be in COMPILED state.
-    profile = self.client.get_runtime_profile(handle)
-    assert "Query State: COMPILED" in profile
-    # After completion of the admission control phase, the query must have at least
-    # reached RUNNING state.
-    self.client.wait_for_admission_control(handle)
-    profile = self.client.get_runtime_profile(handle)
-    assert "Query State: RUNNING" in profile or \
-      "Query State: FINISHED" in profile, profile
-
-    results = self.client.fetch(query, handle)
-    profile = self.client.get_runtime_profile(handle)
-    # After fetching the results, the query must be in state FINISHED.
-    assert "Query State: FINISHED" in profile, profile
 
   def test_query_options(self):
     """Test that the query profile shows expected non-default query options, both set
@@ -747,3 +726,56 @@ class TestObservability(ImpalaTestSuite):
     result = self.execute_query(query)
     assert result.success
     self.__verify_hashtable_stats_profile(result.runtime_profile)
+
+
+class TestQueryStates(ImpalaTestSuite):
+  """Test that the 'Query State' and 'Impala Query State' are set correctly in the
+  runtime profile."""
+
+  @classmethod
+  def get_workload(self):
+    return 'functional-query'
+
+  def test_query_states(self):
+    """Tests that the query profile shows expected query states."""
+    query = "select count(*) from functional.alltypes where bool_col = sleep(10)"
+    handle = self.execute_query_async(query,
+        {"debug_action": "CRS_BEFORE_ADMISSION:SLEEP@1000"})
+    # If ExecuteStatement() has completed and the query is paused in the admission control
+    # phase, then the query must be in COMPILED state.
+    profile = self.client.get_runtime_profile(handle)
+    assert "Query State: COMPILED" in profile
+    assert "Impala Query State: PENDING" in profile
+    # After completion of the admission control phase, the query must have at least
+    # reached RUNNING state.
+    self.client.wait_for_admission_control(handle)
+    profile = self.client.get_runtime_profile(handle)
+    assert "Query State: RUNNING" in profile
+    assert "Impala Query State: RUNNING" in profile
+
+    self.client.fetch(query, handle)
+    profile = self.client.get_runtime_profile(handle)
+    # After fetching the results, the query must be in state FINISHED.
+    assert "Query State: FINISHED" in profile, profile
+    assert "Impala Query State: FINISHED" in profile, profile
+
+  def test_error_query_state(self):
+    """Tests that the query profile shows the proper error state."""
+    query = "select id from functional_parquet.bad_column_metadata"
+    handle = self.execute_query_async(query, {"abort_on_error": "1"})
+
+    def assert_finished():
+      profile = self.client.get_runtime_profile(handle)
+      return "Query State: FINISHED" in profile and \
+             "Impala Query State: FINISHED" in profile
+
+    self.assert_eventually(30, 1, assert_finished)
+    try:
+      self.client.fetch(query, handle)
+      assert False
+    except ImpalaBeeswaxException:
+      pass
+
+    profile = self.client.get_runtime_profile(handle)
+    assert "Query State: ERROR" in profile
+    assert "Impala Query State: ERROR" in profile
