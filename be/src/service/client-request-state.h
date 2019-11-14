@@ -64,7 +64,8 @@ enum class AdmissionOutcome;
 class ClientRequestState {
  public:
   ClientRequestState(const TQueryCtx& query_ctx, ExecEnv* exec_env, Frontend* frontend,
-      ImpalaServer* server, std::shared_ptr<ImpalaServer::SessionState> session);
+      ImpalaServer* server, std::shared_ptr<ImpalaServer::SessionState> session,
+      std::shared_ptr<TExecRequest> exec_request);
 
   ~ClientRequestState();
 
@@ -78,7 +79,7 @@ class ClientRequestState {
   /// returns the operation state is either RUNNING_STATE or PENDING_STATE.
   /// Non-blocking.
   /// Must *not* be called with lock_ held.
-  Status Exec(TExecRequest* exec_request) WARN_UNUSED_RESULT;
+  Status Exec() WARN_UNUSED_RESULT;
 
   /// Execute a HiveServer2 metadata operation
   /// TODO: This is likely a superset of GetTableNames/GetDbs. Coalesce these different
@@ -219,13 +220,13 @@ class ClientRequestState {
   bool returns_result_set() { return !result_metadata_.columns.empty(); }
   const TResultSetMetadata* result_metadata() const { return &result_metadata_; }
   const TUniqueId& query_id() const { return query_ctx_.query_id; }
-  const TExecRequest& exec_request() const { return exec_request_; }
-  TStmtType::type stmt_type() const { return exec_request_.stmt_type; }
+  std::shared_ptr<TExecRequest> exec_request() const { return exec_request_; }
+  TStmtType::type stmt_type() const { return exec_request_->stmt_type; }
   TCatalogOpType::type catalog_op_type() const {
-    return exec_request_.catalog_op_request.op_type;
+    return exec_request_->catalog_op_request.op_type;
   }
   TDdlType::type ddl_type() const {
-    return exec_request_.catalog_op_request.ddl_params.ddl_type;
+    return exec_request_->catalog_op_request.ddl_params.ddl_type;
   }
   boost::mutex* lock() { return &lock_; }
   boost::mutex* fetch_rows_lock() { return &fetch_rows_lock_; }
@@ -252,7 +253,7 @@ class ClientRequestState {
   TUniqueId parent_query_id() const { return query_ctx_.parent_query_id; }
 
   const std::vector<std::string>& GetAnalysisWarnings() const {
-    return exec_request_.analysis_warnings;
+    return exec_request_->analysis_warnings;
   }
 
   inline int64_t last_active_ms() const {
@@ -453,7 +454,7 @@ protected:
       apache::hive::service::cli::thrift::TOperationState::INITIALIZED_STATE;
 
   Status query_status_;
-  TExecRequest exec_request_;
+  std::shared_ptr<TExecRequest> exec_request_;
 
   /// If true, effective_user() has access to the runtime profile and execution
   /// summary.

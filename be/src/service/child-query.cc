@@ -45,7 +45,7 @@ Status ChildQuery::ExecAndFetch() {
   ImpalaServer::TUniqueIdToTHandleIdentifier(session_id, session_secret,
       &exec_stmt_req.sessionHandle.sessionId);
   exec_stmt_req.__set_statement(query_);
-  SetQueryOptions(parent_request_state_->exec_request().query_options, &exec_stmt_req);
+  SetQueryOptions(parent_request_state_->exec_request()->query_options, &exec_stmt_req);
   exec_stmt_req.confOverlay[PARENT_QUERY_OPT] =
       PrintId(parent_request_state_->query_id());
 

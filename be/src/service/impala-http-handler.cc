@@ -173,6 +173,15 @@ void ImpalaHttpHandler::RegisterHandlers(Webserver* webserver) {
   RegisterLogLevelCallbacks(webserver, true);
 }
 
+Status ImpalaHttpHandler::RegisterQuery(
+    const TUniqueId& query_id, const std::shared_ptr<ClientRequestState>& request_state) {
+  return client_request_state_map_.AddClientRequestState(query_id, request_state);
+}
+
+Status ImpalaHttpHandler::UnregisterQuery(const TUniqueId& query_id) {
+  return client_request_state_map_.DeleteClientRequestState(query_id, nullptr);
+}
+
 void ImpalaHttpHandler::HealthzHandler(const Webserver::WebRequest& req,
     std::stringstream* data, HttpStatusCode* response) {
   if (server_->IsHealthy()) {
@@ -321,7 +330,7 @@ void ImpalaHttpHandler::QueryProfileJsonHandler(const Webserver::WebRequest& req
 void ImpalaHttpHandler::InflightQueryIdsHandler(const Webserver::WebRequest& req,
     Document* document) {
   stringstream ss;
-  server_->client_request_state_map_.DoFuncForAllEntries(
+  client_request_state_map_.DoFuncForAllEntries(
       [&](const std::shared_ptr<ClientRequestState>& request_state) {
           ss << PrintId(request_state->query_id()) << "\n";
       });
@@ -445,7 +454,7 @@ void ImpalaHttpHandler::QueryStateHandler(const Webserver::WebRequest& req,
   set<ImpalaServer::QueryStateRecord, ImpalaServer::QueryStateRecordLessThan>
       sorted_query_records;
 
-  server_->client_request_state_map_.DoFuncForAllEntries(
+  client_request_state_map_.DoFuncForAllEntries(
       [&](const std::shared_ptr<ClientRequestState>& request_state) {
           sorted_query_records.insert(ImpalaServer::QueryStateRecord(*request_state));
       });
@@ -855,14 +864,14 @@ void ImpalaHttpHandler::QuerySummaryHandler(bool include_json_plan, bool include
       lock_guard<mutex> l(*request_state->lock());
       query_status = request_state->query_status();
       stmt = request_state->sql_stmt();
-      plan = request_state->exec_request().query_exec_request.query_plan;
+      plan = request_state->exec_request()->query_exec_request.query_plan;
       if ((include_json_plan || include_summary)
           && request_state->GetCoordinator() != nullptr) {
         request_state->GetCoordinator()->GetTExecSummary(&summary);
       }
       if (include_json_plan) {
         for (const TPlanExecInfo& plan_exec_info:
-            request_state->exec_request().query_exec_request.plan_exec_info) {
+            request_state->exec_request()->query_exec_request.plan_exec_info) {
           for (const TPlanFragment& fragment: plan_exec_info.fragments) {
             fragments.push_back(fragment);
           }
@@ -993,7 +1002,7 @@ void ImpalaHttpHandler::AdmissionStateHandler(
     unsigned long num_backends;
   };
   unordered_map<string, vector<QueryInfo>> running_queries;
-  server_->client_request_state_map_.DoFuncForAllEntries([&running_queries](
+  client_request_state_map_.DoFuncForAllEntries([&running_queries](
       const std::shared_ptr<ClientRequestState>& request_state) {
     // Make sure only queries past admission control are added.
     auto query_state = request_state->operation_state();

@@ -21,6 +21,7 @@
 #include <sstream>
 #include <rapidjson/document.h>
 #include "kudu/util/web_callback_registry.h"
+#include "service/client-request-state-map.h"
 #include "util/webserver.h"
 
 #include "service/impala-server.h"
@@ -39,8 +40,20 @@ class ImpalaHttpHandler {
   /// Registers all the per-Impalad webserver callbacks
   void RegisterHandlers(Webserver* webserver);
 
+  /// Registers a query with the HTTP handler. Called when a query is registered by the
+  /// ImpalaServer.
+  Status RegisterQuery(const TUniqueId& query_id,
+      const std::shared_ptr<ClientRequestState>& request_state);
+
+  /// Unregisters a query from the HTTP handler. Called when a query is unregistered by
+  /// the ImpalaServer.
+  Status UnregisterQuery(const TUniqueId& query_id);
+
  private:
   ImpalaServer* server_;
+
+  /// Tracks the currently registered queries.
+  ClientRequestStateMap client_request_state_map_;
 
   /// Raw callback to indicate whether the server is ready to accept queries.
   void HealthzHandler(const Webserver::WebRequest& req, std::stringstream* data,
