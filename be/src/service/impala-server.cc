@@ -1614,28 +1614,33 @@ void ImpalaServer::CancelFromThreadPool(uint32_t thread_id,
     }
   } else {
     // TODO fix locking
-    lock_guard<mutex> l(*request_state->lock());
-    // Only retry a query if it has not already been retried, it is likely (although not
-    // guaranteed), that the query was already retried because of a failed RPC.
-    // TODO could make this more robust by saving the failure status of the original query
-    // and comparing the failed nodes detected vs. the RPC address in the Status
-    if (request_state->was_retried_) {
-      VLOG_QUERY << "CancelFromThreadPool(): should skip retry of query_id= "
-                 << PrintId(query_id) << " because it has already been retried";
-      return;
-    }
-    if (request_state->exec_state() != ClientRequestState::ExecState::FINISHED) {
-      VLOG_QUERY << "CancelFromThreadPool(): retrying query_id=" << PrintId(query_id)
-                 << " status=" << error.GetDetail();
-      error.SetIsRetryable();
-      discard_result(request_state->UpdateQueryStatus(error));
-    } else {
-      VLOG_QUERY << "CancelFromThreadPool(): cancelling query_id=" << PrintId(query_id);
-      Status status = request_state->Cancel(true, &error);
-      if (!status.ok()) {
-        VLOG_QUERY << "Query cancellation (" << PrintId(cancellation_work.query_id())
-                   << ") did not succeed: " << status.GetDetail();
+    {
+      lock_guard<mutex> l(*request_state->lock());
+      // Only retry a query if it has not already been retried, it is likely (although not
+      // guaranteed), that the query was already retried because of a failed RPC.
+      // TODO could make this more robust by saving the failure status of the original
+      // query
+      // and comparing the failed nodes detected vs. the RPC address in the Status
+      if (request_state->was_retried_) {
+        VLOG_QUERY << "CancelFromThreadPool(): should skip retry of query_id= "
+                   << PrintId(query_id) << " because it has already been retried";
+        return;
       }
+      if (request_state->exec_state() != ClientRequestState::ExecState::FINISHED) {
+        VLOG_QUERY << "CancelFromThreadPool(): retrying query_id=" << PrintId(query_id)
+                   << " status=" << error.GetDetail();
+        error.SetIsRetryable();
+        discard_result(request_state->UpdateQueryStatus(error));
+        return;
+      }
+    }
+    // Make to sure release lock before calling Cancel because it acuquires the lock as
+    // well.
+    VLOG_QUERY << "CancelFromThreadPool(): cancelling query_id=" << PrintId(query_id);
+    Status status = request_state->Cancel(true, &error);
+    if (!status.ok()) {
+      VLOG_QUERY << "Query cancellation (" << PrintId(cancellation_work.query_id())
+                 << ") did not succeed: " << status.GetDetail();
     }
     // TODO this is the bug, the query should be cancelled if it is finished and you
     // detect a failed node otherwise the query will hang waiting for that node to finish
