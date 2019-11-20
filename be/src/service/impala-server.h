@@ -924,6 +924,9 @@ class ImpalaServer : public ImpalaServiceIf,
   Status FetchInternal(TUniqueId query_id, bool start_over,
       int32_t fetch_size, beeswax::Results* query_results) WARN_UNUSED_RESULT;
 
+  void BlockOnWait(std::shared_ptr<ClientRequestState>* request_state,
+      beeswax::Results* query_results, bool* timed_out, int64_t* block_on_wait_time_us);
+
   /// Populate dml_result and clean up exec state. If the query
   /// status is an error, dml_result is not populated and the status is returned.
   /// 'session' is RPC client's session, used to check whether the DML can

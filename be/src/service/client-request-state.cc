@@ -1462,6 +1462,18 @@ bool ClientRequestState::GetDmlStats(TDmlResult* dml_result, Status* query_statu
   return true;
 }
 
+void ClientRequestState::WaitUntilRetried() {
+  ExecState exec_state = exec_state_; // Load the exec state once
+  DCHECK(exec_state == ClientRequestState::ExecState::RETRYING
+      || exec_state == ClientRequestState::ExecState::RETRIED);
+  while (exec_state == ClientRequestState::ExecState::RETRYING) {
+    retried_.Wait();
+    exec_state = exec_state_;
+  }
+  DCHECK(exec_state == ClientRequestState::ExecState::RETRIED
+      || exec_state == ClientRequestState::ExecState::ERROR);
+}
+
 void ClientRequestState::UpdateEndTime() {
   // Update the query's end time only if it isn't set previously.
   if (end_time_us_.CompareAndSwap(0, UnixMicros())) {

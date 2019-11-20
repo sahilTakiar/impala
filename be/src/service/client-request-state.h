@@ -189,6 +189,8 @@ class ClientRequestState {
   /// Caller must not hold 'lock()'.
   bool GetDmlStats(TDmlResult* dml_result, Status* query_status);
 
+  void WaitUntilRetried();
+
   std::string ExecStateToString(ExecState state) const;
 
   std::shared_ptr<ImpalaServer::SessionState> session() const { return session_; }

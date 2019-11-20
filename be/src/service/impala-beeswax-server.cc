@@ -531,6 +531,19 @@ inline void ImpalaServer::QueryHandleToTUniqueId(const QueryHandle& handle,
   throw exc;
 }
 
+void ImpalaServer::BlockOnWait(std::shared_ptr<ClientRequestState>* request_state,
+    beeswax::Results* query_results, bool* timed_out, int64_t* block_on_wait_time_us) {
+  int64_t fetch_rows_timeout_us = (*request_state)->fetch_rows_timeout_us();
+  *timed_out =
+      !(*request_state)->BlockOnWait(fetch_rows_timeout_us, block_on_wait_time_us);
+  if (*timed_out) {
+    query_results->__set_ready(false);
+    query_results->__set_has_more(true);
+    query_results->__isset.columns = false;
+    query_results->__isset.data = false;
+  }
+}
+
 Status ImpalaServer::FetchInternal(TUniqueId query_id,
     const bool start_over, const int32_t fetch_size, beeswax::Results* query_results) {
   // Make sure ClientRequestState::Wait() has completed before fetching rows. Wait()
@@ -539,29 +552,26 @@ Status ImpalaServer::FetchInternal(TUniqueId query_id,
   // ClientRequestState::FetchRows() below).
   int64_t block_on_wait_time_us = 0;
   shared_ptr<ClientRequestState> request_state;
-  bool block_on_wait = false;
-  do {
-    request_state = GetClientRequestState(query_id);
-    block_on_wait = request_state->BlockOnWait(
-        request_state->fetch_rows_timeout_us(), &block_on_wait_time_us);
-    if (!block_on_wait) {
-      query_results->__set_ready(false);
-      query_results->__set_has_more(true);
-      query_results->__isset.columns = false;
-      query_results->__isset.data = false;
-      return Status::OK();
-    }
-    if (request_state->exec_state() == ClientRequestState::ExecState::RETRYING
-        || request_state->exec_state() == ClientRequestState::ExecState::RETRIED) {
-      request_state->retried_.Wait();
-    }
-    // TODO do you need the request state lock when reading these? I think you do, but a
-    // bunch of other classes don't do this so might be a systemic problem - consider
-    // using an atomicenum or acquiring the lock before every read.
-  } while (request_state->exec_state() == ClientRequestState::ExecState::RETRYING
-      || request_state->exec_state() == ClientRequestState::ExecState::RETRIED);
+  bool timed_out = false;
+  ClientRequestState::ExecState exec_state;
+  request_state = GetClientRequestState(query_id);
+  BlockOnWait(&request_state, query_results, &timed_out, &block_on_wait_time_us);
+  if (timed_out) return Status::OK();
 
-  // TODO deadlock could occur above if you have double retries
+  // TODO ExecState should be an AtomicEnum
+  exec_state = request_state->exec_state();
+  if (exec_state == ClientRequestState::ExecState::RETRYING
+      || exec_state == ClientRequestState::ExecState::RETRIED) {
+    request_state->WaitUntilRetried();
+    request_state = GetClientRequestState(query_id);
+    // Call BlockOnWait and the DCHECK that the the state is not RETRYING or RETRIED
+    BlockOnWait(&request_state, query_results, &timed_out, &block_on_wait_time_us);
+    exec_state = request_state->exec_state();
+    // TODO will need to remove + refactor this once we support multiple retries
+    DCHECK(exec_state != ClientRequestState::ExecState::RETRYING
+        && exec_state != ClientRequestState::ExecState::RETRIED);
+    if (timed_out) return Status::OK();
+  }
 
   lock_guard<mutex> frl(*request_state->fetch_rows_lock());
   lock_guard<mutex> l(*request_state->lock());
