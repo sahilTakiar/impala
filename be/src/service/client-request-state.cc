@@ -959,7 +959,8 @@ void ClientRequestState::UpdateNonErrorExecState(ExecState new_state) {
 Status ClientRequestState::UpdateQueryStatus(const Status& status) {
   // Preserve the first non-ok status
   if (!status.ok() && query_status_.ok()) {
-    if (status.IsRetryable() && exec_state_ != ExecState::RETRYING) {
+    if (exec_request()->query_options.retry_failed_queries && status.IsRetryable()
+        && exec_state_ != ExecState::RETRYING) {
       // INITIALIZED is possible incase the cancellation thread pool kills the query while
       // it is in the INITIALIZATION phase.
       DCHECK(!was_retried_)

@@ -907,6 +907,10 @@ Status impala::SetQueryOption(const string& key, const string& value,
         query_options->__set_mem_limit_executors(bytes_limit);
         break;
       }
+      case TImpalaQueryOptions::RETRY_FAILED_QUERIES: {
+        query_options->__set_retry_failed_queries(IsTrue(value));
+        break;
+      }
       default:
         if (IsRemovedQueryOption(key)) {
           LOG(WARNING) << "Ignoring attempt to set removed query option '" << key << "'";

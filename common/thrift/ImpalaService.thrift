@@ -484,6 +484,9 @@ enum TImpalaQueryOptions {
   // a) an int (= number of bytes);
   // b) a float followed by "M" (MB) or "G" (GB)
   MEM_LIMIT_EXECUTORS = 96
+
+  // Transparently retry queries that fail due to cluster membership changes.
+  RETRY_FAILED_QUERIES = 97
 }
 
 // The summary of a DML statement.
