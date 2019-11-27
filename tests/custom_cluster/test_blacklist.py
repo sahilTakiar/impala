@@ -113,3 +113,27 @@ class TestBlacklist(CustomClusterTestSuite):
     assert re.search("Blacklisted Executors: (.*)", result.runtime_profile) is None, \
         result.runtime_profile
     assert re.search("NumBackends: 3", result.runtime_profile), result.runtime_profile
+
+  @pytest.mark.execute_serially
+  @CustomClusterTestSuite.with_args("--debug_actions=" +
+      "IMPALA_SERVICE_POOL:127.0.0.1:27002:TransmitData:FAIL@1.0")
+  def test_rpc_failures(self, cursor):
+    """Verifies that an RPC failure causes the target node to be blacklisted. The
+    --debug-actions parameter above causes all RPCs to one of the impalads to fail."""
+    # Run a query which should fail as the impalad hasn't been blacklisted yet.
+    query = "select count(*) from tpch_parquet.lineitem t1, tpch_parquet.lineitem t2 \
+        where t1.l_orderkey = t2.l_orderkey"
+    try:
+      self.execute_query(query)
+      assert False, "Query was expected to fail"
+    except Exception as e:
+      assert "TransmitData() to " in str(e)
+
+    # The impalad that should be blacklisted.
+    blacklisted_impalad = self.cluster.impalads[2]
+
+    # Run another query which should succeed and verify the impalad was blacklisted.
+    result = self.execute_query(query)
+    match = re.search("Blacklisted Executors: (.*)", result.runtime_profile)
+    assert match is not None and match.group(1) == "%s:%s" % \
+        (blacklisted_impalad.hostname, blacklisted_impalad.service.be_port), result.runtime_profile

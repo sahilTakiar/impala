@@ -204,6 +204,12 @@ void Coordinator::InitBackendStates() {
         schedule_, query_ctx(), backend_idx, filter_mode_, entry.second));
     backend_state->Init(fragment_stats_, host_profiles_, obj_pool());
     backend_states_[backend_idx++] = backend_state;
+    pair<TNetworkAddress, BackendState*> addr_to_backend_state(
+        backend_state->krpc_impalad_address(), backend_state);
+    if (UNLIKELY(!addr_to_backend_state_.insert(addr_to_backend_state).second)) {
+      DCHECK(false) << "Network address " << backend_state->krpc_impalad_address()
+                    << " associated with multiple BackendStates";
+    }
   }
   backend_resource_state_ =
       obj_pool()->Add(new BackendResourceState(backend_states_, schedule_));
@@ -783,6 +789,22 @@ Status Coordinator::UpdateBackendExecStatus(const ReportExecStatusRequestPB& req
       // We may start receiving status reports before all exec rpcs are complete.
       // Can't apply state transition until no more exec rpcs will be sent.
       exec_rpcs_complete_barrier_.Wait();
+
+      // If the Backend failed due to a RPC failure, blacklist the destination node of
+      // the failed RPC.
+      if (request.has_status_aux_info()
+          && request.status_aux_info().has_rpc_error_msg()) {
+        DCHECK(request.status_aux_info().rpc_error_msg().has_dest_node());
+        const NetworkAddressPB& dest_node =
+            request.status_aux_info().rpc_error_msg().dest_node();
+        LOG(INFO) << "Blacklisting " << NetworkAddressPBToString(dest_node)
+                  << " because a RPC to it failed.";
+        BackendState* be_state =
+            addr_to_backend_state_.at(NetworkAddressPBToTNetworkAddress(dest_node));
+        const TBackendDescriptor& be_desc = be_state->exec_params()->be_desc;
+        ExecEnv::GetInstance()->cluster_membership_mgr()->BlacklistExecutor(be_desc);
+      }
+
       // Transition the status if we're not already in a terminal state. This won't block
       // because either this transitions to an ERROR state or the query is already in
       // a terminal state.

@@ -248,6 +248,10 @@ class Coordinator { // NOLINT: The member variables could be re-ordered to save 
   /// are non-nullptr and owned by obj_pool(). Populated by Exec()/InitBackendStates().
   std::vector<BackendState*> backend_states_;
 
+  /// A map from the TNetworkAddress of a backend to the BackendState running on the
+  /// TNetworkAddress.
+  boost::unordered_map<TNetworkAddress, BackendState*> addr_to_backend_state_;
+
   /// Protects the population of backend_states_ vector (not the BackendState objects).
   /// Used when accessing backend_states_ if it's not guaranteed that
   /// InitBackendStates() has completed.

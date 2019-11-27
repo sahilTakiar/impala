@@ -334,6 +334,14 @@ void QueryState::ConstructReport(bool instances_started,
       fis->GetStatusReport(instance_status, &profiles_forest->profile_trees.back());
     }
   }
+
+  // Set the StatusAuxInfoPB field. Only set the StatusAuxInfoPB field for the failed
+  // fragment instance.
+  if (IsValidFInstanceId(failed_finstance_id_)) {
+    FragmentInstanceState* fis = fis_map_.at(failed_finstance_id_);
+    report->set_allocated_status_aux_info(
+        fis->runtime_state()->status_aux_info().CreateStatusAuxInfoPB());
+  }
 }
 
 bool QueryState::ReportExecStatus() {

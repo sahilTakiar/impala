@@ -403,6 +403,9 @@ Status KrpcDataStreamSender::Channel::WaitForRpcLocked(std::unique_lock<SpinLock
     LOG(ERROR) << "channel send to " << TNetworkAddressToString(address_) << " failed: "
                << "(fragment_instance_id=" << PrintId(fragment_instance_id_) << "): "
                << rpc_status_.GetDetail();
+    unique_ptr<StatusAuxInfo::RPCErrorMessage> rpc_error_msg =
+        make_unique<StatusAuxInfo::RPCErrorMessage>(address_);
+    parent_->state_->status_aux_info().SetRPCErrorMessage(move(rpc_error_msg));
     return rpc_status_;
   }
   return Status::OK();
@@ -443,6 +446,9 @@ void KrpcDataStreamSender::Channel::HandleFailedRPC(const DoRpcFn& rpc_fn,
         MonoDelta::FromMilliseconds(FLAGS_rpc_retry_interval_ms));
     return;
   }
+  unique_ptr<StatusAuxInfo::RPCErrorMessage> rpc_error_msg =
+      make_unique<StatusAuxInfo::RPCErrorMessage>(address_);
+  parent_->state_->status_aux_info().SetRPCErrorMessage(move(rpc_error_msg));
   MarkDone(FromKuduStatus(controller_status, prepend));
 }
 

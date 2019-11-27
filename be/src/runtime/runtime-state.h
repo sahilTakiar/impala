@@ -29,6 +29,7 @@
 #include "common/atomic.h"
 #include "runtime/client-cache-types.h"
 #include "runtime/dml-exec-state.h"
+#include "runtime/status-aux-info.h"
 #include "util/error-util-internal.h"
 #include "util/runtime-profile.h"
 #include "gen-cpp/ImpalaInternalService_types.h"
@@ -302,6 +303,10 @@ class RuntimeState {
   /// Release resources and prepare this object for destruction. Can only be called once.
   void ReleaseResources();
 
+  StatusAuxInfo& status_aux_info() {
+    return status_aux_info_;
+  }
+
   static const char* LLVM_CLASS_NAME;
 
  private:
@@ -413,6 +418,9 @@ class RuntimeState {
   /// Manages runtime filters that are either produced or consumed (or both!) by plan
   /// nodes that share this runtime state.
   boost::scoped_ptr<RuntimeFilterBank> filter_bank_;
+
+  /// Auxiliary information associated with the query_status_.
+  StatusAuxInfo status_aux_info_;
 
   /// prohibit copies
   RuntimeState(const RuntimeState&);

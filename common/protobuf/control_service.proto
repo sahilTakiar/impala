@@ -146,6 +146,17 @@ message FragmentInstanceExecStatusPB {
   repeated StatefulStatusPB stateful_report = 6;
 }
 
+// Metadata that can be associated with a StatusPB object created as the result of
+// a failed RPC.
+message RPCErrorMessagePB {
+  required NetworkAddressPB dest_node = 1;
+}
+
+// Metadata that can be associated with a StatusPB object.
+message StatusAuxInfoPB {
+  optional RPCErrorMessagePB rpc_error_msg = 1;
+}
+
 message ReportExecStatusRequestPB {
   // The query id which this report is for.
   optional UniqueIdPB query_id = 1;
@@ -167,6 +178,10 @@ message ReportExecStatusRequestPB {
   // the fragment which sets 'overall_status' above. Not set if 'overall_status' is a
   // general error (e.g. failure to start fragment instances).
   optional UniqueIdPB fragment_instance_id = 6;
+
+  // Metadata associated with a failed StatusPB. Only set for the failed fragment
+  // instance.
+  optional StatusAuxInfoPB status_aux_info = 7;
 }
 
 message ReportExecStatusResponsePB {
