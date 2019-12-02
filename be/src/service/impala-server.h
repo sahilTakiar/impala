@@ -642,6 +642,10 @@ class ImpalaServer : public ImpalaServiceIf,
   std::shared_ptr<ClientRequestState> GetClientRequestState(
       const TUniqueId& query_id);
 
+  /// Return exec state for given query_id, or NULL if not found.
+  std::shared_ptr<ClientRequestState> GetRunningClientRequestState(
+      const TUniqueId& query_id);
+
   /// Used in situations where the client provides a session ID and a query ID and the
   /// caller needs to validate that the query can be accessed from the session. The two
   /// arguments are the session obtained by looking up the session ID provided by the

@@ -66,7 +66,8 @@ class ClientRequestState {
  public:
   ClientRequestState(const TQueryCtx& query_ctx, ExecEnv* exec_env, Frontend* frontend,
       ImpalaServer* server, std::shared_ptr<ImpalaServer::SessionState> session,
-      std::shared_ptr<TExecRequest> exec_request);
+      std::shared_ptr<TExecRequest> exec_request,
+      std::unique_ptr<const TUniqueId> retried_id = nullptr);
 
   ~ClientRequestState();
 
@@ -295,11 +296,16 @@ class ClientRequestState {
   /// Returns the FETCH_ROWS_TIMEOUT_MS value for this query (converted to microseconds).
   int64_t fetch_rows_timeout_us() const { return fetch_rows_timeout_us_; }
 
-  TUniqueId* retried_id_;
+  void MarkAsRetried();
 
-  bool was_retried_ = false;
+  /// Returns true if this ClientRequestState was created as a retry of a previously
+  /// failed query, false otherwise.
+  bool WasRetried() const { return retried_id_ != nullptr; }
 
-  CountingBarrier retried_;
+  const TUniqueId& retried_id() const {
+    DCHECK(retried_id_ != nullptr);
+    return *retried_id_;
+  }
 
 protected:
   /// Updates the end_time_us_ of this query if it isn't set. The end time is determined
@@ -512,6 +518,14 @@ protected:
   /// Timeout, in microseconds, when waiting for rows to become available. Derived from
   /// the query option FETCH_ROWS_TIMEOUT_MS.
   const int64_t fetch_rows_timeout_us_;
+
+  /// If this ClientRequestState was created as a retry of a previously failed query, the
+  /// retried_id_ is set to the query id of the original query that failed.
+  std::unique_ptr<const TUniqueId> retried_id_ = nullptr;
+
+  /// Condition variable used to signal the threads that are waiting until the query has
+  /// been retried.
+  ConditionVariable block_until_retried_cv_;
 
   /// Executes a local catalog operation (an operation that does not need to execute
   /// against the catalog service). Includes USE, SHOW, DESCRIBE, and EXPLAIN statements.

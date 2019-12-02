@@ -99,9 +99,8 @@ static const std::map<ClientRequestState::ExecState, const char*> EXEC_STATE_STR
 ClientRequestState::ClientRequestState(
     const TQueryCtx& query_ctx, ExecEnv* exec_env, Frontend* frontend,
     ImpalaServer* server, shared_ptr<ImpalaServer::SessionState> session,
-    shared_ptr<TExecRequest> exec_request)
-  : retried_(1),
-    query_ctx_(query_ctx),
+    shared_ptr<TExecRequest> exec_request, unique_ptr<const TUniqueId> retried_id)
+  : query_ctx_(query_ctx),
     last_active_time_ms_(numeric_limits<int64_t>::max()),
     child_query_executor_(new ChildQueryExecutor),
     exec_env_(exec_env),
@@ -116,7 +115,8 @@ ClientRequestState::ClientRequestState(
     frontend_(frontend),
     parent_server_(server),
     start_time_us_(UnixMicros()),
-    fetch_rows_timeout_us_(MICROS_PER_MILLI * query_options().fetch_rows_timeout_ms) {
+    fetch_rows_timeout_us_(MICROS_PER_MILLI * query_options().fetch_rows_timeout_ms),
+    retried_id_(move(retried_id)) {
 #ifndef NDEBUG
   profile_->AddInfoString("DEBUG MODE WARNING", "Query profile created while running a "
       "DEBUG build of Impala. Use RELEASE builds to measure query performance.");
@@ -963,7 +963,7 @@ Status ClientRequestState::UpdateQueryStatus(const Status& status) {
         && exec_state_ != ExecState::RETRYING) {
       // INITIALIZED is possible incase the cancellation thread pool kills the query while
       // it is in the INITIALIZATION phase.
-      DCHECK(!was_retried_)
+      DCHECK(!WasRetried())
           << GetStackTrace()
           << " cannot retry a query that has already been retried query_id = "
           << PrintId(query_id()) << " retried_id = " << PrintId(*retried_id_);
@@ -1464,15 +1464,21 @@ bool ClientRequestState::GetDmlStats(TDmlResult* dml_result, Status* query_statu
 }
 
 void ClientRequestState::WaitUntilRetried() {
+  unique_lock<mutex> l(lock_);
   ExecState exec_state = exec_state_; // Load the exec state once
   DCHECK(exec_state == ClientRequestState::ExecState::RETRYING
       || exec_state == ClientRequestState::ExecState::RETRIED);
   while (exec_state == ClientRequestState::ExecState::RETRYING) {
-    retried_.Wait();
+    block_until_retried_cv_.Wait(l);
     exec_state = exec_state_;
   }
   DCHECK(exec_state == ClientRequestState::ExecState::RETRIED
       || exec_state == ClientRequestState::ExecState::ERROR);
+}
+
+void ClientRequestState::MarkAsRetried() {
+  UpdateNonErrorExecState(ExecState::RETRIED);
+  block_until_retried_cv_.NotifyOne();
 }
 
 void ClientRequestState::UpdateEndTime() {

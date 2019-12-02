@@ -1494,15 +1494,12 @@ void ImpalaServer::RetryQueryFromThreadPool(
   const TQueryCtx& query_ctx = retry_exec_request->query_exec_request.query_ctx;
   PrepareQueryContext(&retry_exec_request->query_exec_request.query_ctx);
 
+  unique_ptr<TUniqueId> original_query_id =
+      make_unique<TUniqueId>(request_state->query_id());
   shared_ptr<ClientRequestState> retry_request_state;
-  retry_request_state.reset(new ClientRequestState(query_ctx, exec_env_,
-      exec_env_->frontend(), this, request_state->session(), retry_exec_request));
-
-  {
-    lock_guard<mutex> l(*request_state->lock());
-    retry_request_state->retried_id_ = new TUniqueId(request_state->query_id());
-    retry_request_state->was_retried_ = true;
-  }
+  retry_request_state.reset(
+      new ClientRequestState(query_ctx, exec_env_, exec_env_->frontend(), this,
+          request_state->session(), retry_exec_request, move(original_query_id)));
 
   // We don't set the Frontend timeline since the Frontend code was never invoked.
   retry_request_state->set_user_profile_access(
@@ -1543,7 +1540,6 @@ void ImpalaServer::RetryQueryFromThreadPool(
   DCHECK(status.ok());
 
   VLOG_QUERY << "UpdateNonErrorExecState setting to RETRIED";
-  request_state->UpdateNonErrorExecState(ClientRequestState::ExecState::RETRIED);
   // TODO there is a bug where calling this method / ArchiveQuery on the original query_id
   // will use the new ClientRequesState, this causes a bug where duplicate entries for
   // the retried query show up in the profile. The RETRIED query shows up because
@@ -1558,7 +1554,7 @@ void ImpalaServer::RetryQueryFromThreadPool(
   DCHECK(status.ok()) << status.GetDetail();
   VLOG_QUERY << "Unregistered query with id = " << PrintId(request_state->query_id());
   MarkSessionInactive(request_state->session());
-  request_state->retried_.Notify();
+  request_state->MarkAsRetried();
 }
 
 void ImpalaServer::CancelFromThreadPool(uint32_t thread_id,
@@ -1621,7 +1617,7 @@ void ImpalaServer::CancelFromThreadPool(uint32_t thread_id,
       // TODO could make this more robust by saving the failure status of the original
       // query
       // and comparing the failed nodes detected vs. the RPC address in the Status
-      if (request_state->was_retried_) {
+      if (request_state->WasRetried()) {
         VLOG_QUERY << "CancelFromThreadPool(): should skip retry of query_id= "
                    << PrintId(query_id) << " because it has already been retried";
         return;
@@ -2714,6 +2710,18 @@ shared_ptr<ClientRequestState> ImpalaServer::GetClientRequestState(
   }
 }
 
+shared_ptr<ClientRequestState> ImpalaServer::GetRunningClientRequestState(
+    const TUniqueId& query_id) {
+  VLOG_QUERY << "calling GetRunningClientRequestState";
+  shared_ptr<ClientRequestState> client_request_state = GetClientRequestState(query_id);
+  if (client_request_state != nullptr && client_request_state->WasRetried()
+      && client_request_state->retried_id() == query_id) {
+    return nullptr;
+  }
+  VLOG_QUERY << "returning from GetRunningClientRequestState";
+  return client_request_state;
+}
+
 Status ImpalaServer::CheckClientRequestSession(
     SessionState* session, const std::string& client_request_effective_user,
     const TUniqueId& query_id) {
@@ -2737,14 +2745,9 @@ void ImpalaServer::UpdateFilter(TUpdateFilterResult& result,
   DCHECK(params.__isset.query_id);
   DCHECK(params.__isset.filter_id);
   shared_ptr<ClientRequestState> client_request_state =
-      GetClientRequestState(params.query_id);
+      GetRunningClientRequestState(params.query_id);
   if (client_request_state.get() == nullptr) {
     LOG(INFO) << "Could not find client request state: " << PrintId(params.query_id);
-    return;
-  }
-  if (client_request_state->was_retried_
-      && params.query_id == *client_request_state->retried_id_) {
-    LOG(INFO) << "Got a filter for an old query attempt, skipping";
     return;
   }
   if (client_request_state->exec_state() != ClientRequestState::ExecState::RETRYING
