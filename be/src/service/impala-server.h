@@ -713,12 +713,16 @@ class ImpalaServer : public ImpalaServiceIf,
   Status UnregisterQuery(const TUniqueId& query_id, bool check_inflight,
       const Status* cause = NULL) WARN_UNUSED_RESULT;
 
+  /// Delegates to UnregisterQuery. If UnregisterQuery returns an error Status, the
+  /// status is logged and then discarded.
+  void UnregisterQueryDiscardResult(
+      const TUniqueId& query_id, bool check_inflight, const Status* cause = NULL);
+
   /// Performs any final cleanup necessary before the given ClientRequestState goes out
   /// of scope and is deleted. Marks the given ClientRequestState as done, removes the
   /// query from the inflight queries list, updates query_locations_, and archives the
   /// query. Used when unregistering the query.
-  Status CloseClientRequestState(
-      const std::shared_ptr<ClientRequestState>& request_state) WARN_UNUSED_RESULT;
+  void CloseClientRequestState(const std::shared_ptr<ClientRequestState>& request_state);
 
   /// Initiates query cancellation reporting the given cause as the query status.
   /// Assumes deliberate cancellation by the user if the cause is NULL.  Returns an

@@ -985,8 +985,7 @@ void ClientRequestState::MarkAsRetrying(const Status& status) {
 
   // Set the query status.
   query_status_ = status;
-  summary_profile_->AddInfoStringRedacted(
-      "Query Status", "Retrying: " + query_status_.GetDetail());
+  summary_profile_->AddInfoStringRedacted("Retry Cause", query_status_.GetDetail());
 }
 
 Status ClientRequestState::UpdateQueryStatus(const Status& status) {

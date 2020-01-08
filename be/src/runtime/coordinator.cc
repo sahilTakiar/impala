@@ -468,8 +468,11 @@ Status Coordinator::FinishBackendStartup() {
                 << " because an Exec() rpc to it failed.";
       const TBackendDescriptor& be_desc = backend_state->exec_params()->be_desc;
       ExecEnv::GetInstance()->cluster_membership_mgr()->BlacklistExecutor(be_desc);
-      parent_request_state_->parent_server_->RetryAsync(
+      if (!RowsFetched()) {
+        // Don't retry the query if any rows have already been read by the client.
+        parent_request_state_->parent_server_->RetryAsync(
           query_id(), backend_state->exec_rpc_status());
+      }
     }
     if (backend_state->rpc_latency() > max_latency) {
       // Find the backend that takes the most time to acknowledge to
@@ -757,16 +760,16 @@ Status Coordinator::GetNext(QueryResultSet* results, int max_rows, bool* eos,
   if (parent_request_state_->fetch_rows_timeout_us() == 0) {
     timeout_us = 0;
   } else {
-    timeout_us = !first_row_fetched_ ?
+    timeout_us = !first_row_fetched_.Load() ?
         max(static_cast<int64_t>(1),
             parent_request_state_->fetch_rows_timeout_us() - block_on_wait_time_us) :
         parent_request_state_->fetch_rows_timeout_us();
   }
 
   Status status = coord_sink_->GetNext(runtime_state, results, max_rows, eos, timeout_us);
-  if (!first_row_fetched_ && results->size() > 0) {
+  if (!first_row_fetched_.Load() && results->size() > 0) {
     query_events_->MarkEvent("First row fetched");
-    first_row_fetched_ = true;
+    first_row_fetched_.Store(true);
   }
   RETURN_IF_ERROR(UpdateExecState(
           status, &runtime_state->fragment_instance_id(), FLAGS_hostname));
@@ -924,7 +927,10 @@ void Coordinator::UpdateBlacklistWithAuxErrorInfo(
                   << " because a RPC to it failed.";
         ExecEnv::GetInstance()->cluster_membership_mgr()->BlacklistExecutor(
             dest_node_exec_params->be_desc);
-        parent_request_state_->parent_server_->RetryAsync(query_id(), status);
+        // Don't retry the query if any rows have already been read by the client.
+        if (!RowsFetched()) {
+          parent_request_state_->parent_server_->RetryAsync(query_id(), status);
+        }
         break;
       }
     }

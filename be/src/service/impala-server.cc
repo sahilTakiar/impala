@@ -1141,12 +1141,20 @@ Status ImpalaServer::UnregisterQuery(const TUniqueId& query_id, bool check_infli
   RETURN_IF_ERROR(http_handler_->UnregisterQuery(query_id));
 
   // Close and delete the ClientRequestState.
-  RETURN_IF_ERROR(CloseClientRequestState(request_state));
+  CloseClientRequestState(request_state);
 
   return Status::OK();
 }
 
-Status ImpalaServer::CloseClientRequestState(
+void ImpalaServer::UnregisterQueryDiscardResult(
+    const TUniqueId& query_id, bool check_inflight, const Status* cause) {
+  Status status = UnregisterQuery(query_id, check_inflight, cause);
+  if (!status.ok()) {
+    VLOG_QUERY << "Query de-registration (" << PrintId(query_id) << ") failed";
+  }
+}
+
+void ImpalaServer::CloseClientRequestState(
     const std::shared_ptr<ClientRequestState>& request_state) {
   request_state->Done();
 
@@ -1190,7 +1198,6 @@ Status ImpalaServer::CloseClientRequestState(
   }
   ArchiveQuery(*request_state);
   ImpaladMetrics::NUM_QUERIES_REGISTERED->Increment(-1L);
-  return Status::OK();
 }
 
 Status ImpalaServer::UpdateCatalogMetrics() {
@@ -1424,8 +1431,9 @@ void ImpalaServer::RetryQueryFromThreadPool(
   // Cancel the query.
   Status status = request_state->Cancel(true, nullptr);
   if (!status.ok()) {
-    VLOG_QUERY << retry_failed_msg
-               << Substitute(" cancellation failed with error $0", status.GetDetail());
+    status.AddDetail(retry_failed_msg + " cancellation failed");
+    discard_result(request_state->UpdateQueryStatus(status));
+    return;
   }
 
   // Copy the TExecRequest from the original query and reset it.
@@ -1450,38 +1458,51 @@ void ImpalaServer::RetryQueryFromThreadPool(
         retry_request_state->exec_request().result_set_metadata);
   }
 
+  // The steps below mimic what is done when a query is first launched. See
+  // ImpalaServer::ExecuteStatement.
+
   // Register the new query.
   MarkSessionActive(request_state->session());
   status = RegisterQuery(request_state->session(), retry_request_state);
   if (!status.ok()) {
-    VLOG_QUERY << retry_failed_msg
-               << Substitute(
-                      " registration for new query with id $0 failed with error $0",
-                      PrintId(retry_request_state->query_id()), status.GetDetail());
+    status.AddDetail(
+        retry_failed_msg + Substitute(" registration for new query with id $0 failed",
+                               PrintId(retry_request_state->query_id())));
+    discard_result(request_state->UpdateQueryStatus(status));
+    UnregisterQueryDiscardResult(retry_request_state->query_id(), false, &status);
+    return;
   }
 
   // Run the new query.
   status = retry_request_state->Exec();
   if (!status.ok()) {
-    VLOG_QUERY << retry_failed_msg
-               << Substitute(" Exec for new query with id $0 failed with error $0",
-                      PrintId(retry_request_state->query_id()), status.GetDetail());
+    status.AddDetail(
+        retry_failed_msg + Substitute(" Exec for new query with id $0 failed",
+                               PrintId(retry_request_state->query_id())));
+    discard_result(request_state->UpdateQueryStatus(status));
+    UnregisterQueryDiscardResult(retry_request_state->query_id(), false, &status);
+    return;
   }
 
   status = retry_request_state->WaitAsync();
   if (!status.ok()) {
-    VLOG_QUERY << retry_failed_msg
-               << Substitute(" WaitAsync for new query with id $0 failed with error $0",
-                      PrintId(retry_request_state->query_id()), status.GetDetail());
+    status.AddDetail(retry_failed_msg
+        + Substitute(" WaitAsync for new query with id $0 failed with error $0",
+                         PrintId(retry_request_state->query_id())));
+    discard_result(request_state->UpdateQueryStatus(status));
+    UnregisterQueryDiscardResult(retry_request_state->query_id(), false, &status);
+    return;
   }
 
   // Mark the new query as "in flight".
   status = SetQueryInflight(request_state->session(), retry_request_state);
   if (!status.ok()) {
-    VLOG_QUERY << retry_failed_msg
-               << Substitute(
-                      " SetQueryInFlight for new query with id $0 failed with error $0",
-                      PrintId(retry_request_state->query_id()), status.GetDetail());
+    status.AddDetail(
+        retry_failed_msg + Substitute(" SetQueryInFlight for new query with id $0 failed",
+                               PrintId(retry_request_state->query_id())));
+    discard_result(request_state->UpdateQueryStatus(status));
+    UnregisterQueryDiscardResult(retry_request_state->query_id(), false, &status);
+    return;
   }
 
   // Associate the old query_id with the new ClientRequestState so that existing
@@ -1489,19 +1510,16 @@ void ImpalaServer::RetryQueryFromThreadPool(
   status = client_request_state_map_.AddClientRequestState(
       query_id, retry_request_state, true);
   if (!status.ok()) {
-    VLOG_QUERY
-        << retry_failed_msg
-        << Substitute(
-               " AddClientRequesState for new query with id $0 failed with error $0",
-               PrintId(retry_request_state->query_id()), status.GetDetail());
+    status.AddDetail(retry_failed_msg
+        + Substitute(" AddClientRequestState for new query with id $0 failed",
+                         PrintId(retry_request_state->query_id())));
+    discard_result(request_state->UpdateQueryStatus(status));
+    UnregisterQueryDiscardResult(retry_request_state->query_id(), false, &status);
+    return;
   }
 
   // Close the old query.
-  status = CloseClientRequestState(request_state);
-  if (!status.ok()) {
-    VLOG_QUERY << retry_failed_msg
-               << Substitute(" failed to close query with error $0", status.GetDetail());
-  }
+  CloseClientRequestState(request_state);
   MarkSessionInactive(request_state->session());
 
   // Mark the original query as successfully retried.
@@ -1554,11 +1572,7 @@ void ImpalaServer::CancelFromThreadPool(uint32_t thread_id,
   }
 
   if (cancellation_work.unregister()) {
-    Status status = UnregisterQuery(cancellation_work.query_id(), true, &error);
-    if (!status.ok()) {
-      VLOG_QUERY << "Query de-registration (" << PrintId(cancellation_work.query_id())
-                 << ") failed";
-    }
+    UnregisterQueryDiscardResult(cancellation_work.query_id(), true, &error);
   } else {
     {
       // Retry queries that would otherwise be cancelled due to an impalad leaving the

@@ -393,7 +393,7 @@ class Coordinator { // NOLINT: The member variables could be re-ordered to save 
   std::unique_ptr<FilterRoutingTable> filter_routing_table_;
 
   /// True if the first row has been fetched, false otherwise.
-  bool first_row_fetched_ = false;
+  AtomicBool first_row_fetched_{false};
 
   /// Returns a local object pool.
   ObjectPool* obj_pool() { return obj_pool_.get(); }
@@ -558,6 +558,9 @@ class Coordinator { // NOLINT: The member variables could be re-ordered to save 
   /// fragment on that node failed due to a disk IO error.
   void UpdateBlacklistWithAuxErrorInfo(
       const ReportExecStatusRequestPB& request, Status status);
+
+  /// Returns true if any rows have been fetched, false otherwise.
+  bool RowsFetched() { return first_row_fetched_.Load(); }
 
   /// BackendState and BackendResourceState are private to the Coordinator class, so mark
   /// all tests in CoordinatorBackendStateTest as friends.
