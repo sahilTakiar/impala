@@ -226,6 +226,9 @@ class Coordinator { // NOLINT: The member variables could be re-ordered to save 
   std::vector<TNetworkAddress> GetActiveBackends(
       const std::vector<TNetworkAddress>& candidates);
 
+  /// Returns true if any rows have been fetched, false otherwise.
+  bool RowsFetched() const { return first_row_fetched_.Load(); }
+
  private:
   class BackendState;
   class BackendResourceState;
@@ -558,9 +561,6 @@ class Coordinator { // NOLINT: The member variables could be re-ordered to save 
   /// fragment on that node failed due to a disk IO error.
   void UpdateBlacklistWithAuxErrorInfo(
       const ReportExecStatusRequestPB& request, Status status);
-
-  /// Returns true if any rows have been fetched, false otherwise.
-  bool RowsFetched() { return first_row_fetched_.Load(); }
 
   /// BackendState and BackendResourceState are private to the Coordinator class, so mark
   /// all tests in CoordinatorBackendStateTest as friends.

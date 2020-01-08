@@ -273,6 +273,9 @@ class ClientRequestState {
   void set_user_profile_access(bool user_has_profile_access) {
     user_has_profile_access_ = user_has_profile_access;
   }
+  void set_retried_id(std::unique_ptr<TUniqueId> retried_id) {
+    retried_id_ = move(retried_id);
+  }
   const RuntimeProfile* profile() const { return profile_; }
   const RuntimeProfile* summary_profile() const { return summary_profile_; }
   int64_t start_time_us() const { return start_time_us_; }

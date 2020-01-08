@@ -1450,7 +1450,8 @@ void ImpalaServer::RetryQueryFromThreadPool(
   shared_ptr<ClientRequestState> retry_request_state;
   retry_request_state.reset(
       new ClientRequestState(query_ctx, exec_env_, exec_env_->frontend(), this,
-          request_state->session(), move(retry_exec_request), move(original_query_id)));
+          request_state->session(), move(retry_exec_request)));
+  retry_request_state->set_retried_id(move(original_query_id));
   retry_request_state->set_user_profile_access(
       retry_request_state->exec_request().user_has_profile_access);
   if (retry_request_state->exec_request().__isset.result_set_metadata) {
@@ -1583,7 +1584,7 @@ void ImpalaServer::CancelFromThreadPool(uint32_t thread_id,
                    << PrintId(query_id) << " because it has already been retried";
         return;
       }
-      if (request_state->exec_state() != ClientRequestState::ExecState::FINISHED) {
+      if (!request_state->GetCoordinator()->RowsFetched()) {
         VLOG_QUERY << "CancelFromThreadPool(): retrying query_id=" << PrintId(query_id)
                    << " status=" << error.GetDetail();
         RetryAsync(query_id, error);

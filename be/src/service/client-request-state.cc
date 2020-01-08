@@ -971,7 +971,7 @@ void ClientRequestState::UpdateNonErrorExecState(ExecState new_state) {
 void ClientRequestState::MarkAsRetrying(const Status& status) {
   // A query that has already been retried, cannot be retried again.
   DCHECK(!WasRetried()) << Substitute("Cannot retry a query that has already been "
-                                      "retried  query_id = $0 retried_id = $1",
+                                      "retried query_id = $0 retried_id = $1",
       PrintId(query_id()), PrintId(retried_id()));
 
   // Triggering a retry from the INITIALIZED phase is possible: the
@@ -985,6 +985,9 @@ void ClientRequestState::MarkAsRetrying(const Status& status) {
 
   // Set the query status.
   query_status_ = status;
+  summary_profile_->AddInfoStringRedacted("Query Status", query_status_.GetDetail());
+  // The Query Status might be overwritten later in the the retry fails. "Retry Cause"
+  // preserves the original error that triggered the retry.
   summary_profile_->AddInfoStringRedacted("Retry Cause", query_status_.GetDetail());
 }
 
@@ -995,6 +998,7 @@ Status ClientRequestState::UpdateQueryStatus(const Status& status) {
     query_status_ = status;
     summary_profile_->AddInfoStringRedacted("Query Status", query_status_.GetDetail());
   }
+
   return status;
 }
 
