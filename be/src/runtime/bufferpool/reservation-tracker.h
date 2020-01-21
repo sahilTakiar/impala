@@ -189,7 +189,7 @@ class ReservationTracker {
  private:
   /// Returns the amount of 'reservation_' that is unused.
   inline int64_t unused_reservation() const {
-    return reservation_ - used_reservation_ - child_reservations_;
+    return reservation_.Load() - used_reservation_.Load() - child_reservations_;
   }
 
   /// Returns the parent's memtracker if 'parent_' is non-NULL, or NULL otherwise.
@@ -313,8 +313,7 @@ class ReservationTracker {
   int64_t reservation_limit_;
 
   /// This tracker's current reservation in bytes. 'reservation_' <= 'reservation_limit_'.
-  /// Can be read with an atomic load without holding lock.
-  int64_t reservation_;
+  AtomicInt64 reservation_;
 
   /// Total reservation of children in bytes. This is included in 'reservation_'.
   /// 'used_reservation_' + 'child_reservations_' <= 'reservation_'.
@@ -323,8 +322,7 @@ class ReservationTracker {
 
   /// The amount of the reservation currently used by this tracker in bytes.
   /// 'used_reservation_' + 'child_reservations_' <= 'reservation_'.
-  /// Can be read with an atomic load without holding lock.
-  int64_t used_reservation_;
+  AtomicInt64 used_reservation_;
 };
 }
 

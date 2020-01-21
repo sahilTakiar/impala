@@ -121,7 +121,7 @@ Status SystemAllocator::AllocateViaMalloc(int64_t len, uint8_t** buffer_mem) {
   // This ensures that it can be backed by a whole pages, rather than parts of pages.
   size_t alignment = use_huge_pages ? HUGE_PAGE_SIZE : SMALL_PAGE_SIZE;
   int rc = posix_memalign(reinterpret_cast<void**>(buffer_mem), alignment, len);
-#ifdef ADDRESS_SANITIZER
+#if defined(ADDRESS_SANITIZER) || defined(THREAD_SANITIZER)
   // Workaround ASAN bug where posix_memalign returns 0 even when allocation fails.
   // It should instead return ENOMEM. See https://bugs.llvm.org/show_bug.cgi?id=32968.
   if (rc == 0 && *buffer_mem == nullptr && len != 0) rc = ENOMEM;

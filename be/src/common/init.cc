@@ -419,7 +419,8 @@ extern "C" const char *__asan_default_options() {
 // Default TSAN_OPTIONS. Override by setting environment variable $TSAN_OPTIONS.
 extern "C" const char *__tsan_default_options() {
   // Note that backend test should re-configure to halt_on_error=1
-  return "halt_on_error=0 history_size=7";
+  return "halt_on_error=0 history_size=7 allocator_may_return_null=1 "
+         "ignore_noninstrumented_modules=1 suppressions=" THREAD_SANITIZER_SUPPRESSIONS;
 }
 #endif
 

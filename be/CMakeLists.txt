@@ -130,7 +130,8 @@ SET(CXX_FLAGS_UBSAN "${CXX_FLAGS_UBSAN} -O0")
 # Set the flags to the thread sanitizer, also known as "tsan"
 # Turn on sanitizer and debug symbols to get stack traces:
 SET(CXX_FLAGS_TSAN "${CXX_CLANG_FLAGS} -Werror -O1 -ggdb3 -fno-omit-frame-pointer")
-SET(CXX_FLAGS_TSAN "${CXX_FLAGS_TSAN} -fsanitize=thread -DTHREAD_SANITIZER")
+SET(CXX_FLAGS_TSAN "${CXX_FLAGS_TSAN} -fsanitize=thread -DTHREAD_SANITIZER -DDYNAMIC_ANNOTATIONS_ENABLED")
+SET(CXX_FLAGS_TSAN "${CXX_FLAGS_TSAN} -DTHREAD_SANITIZER_SUPPRESSIONS=\\\"$ENV{IMPALA_HOME}/bin/tsan-suppressions.txt\\\"")
 
 SET(CXX_FLAGS_TIDY "${CXX_CLANG_FLAGS}")
 # Catching unused variables requires an optimization level greater than 0

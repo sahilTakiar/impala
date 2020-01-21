@@ -1068,6 +1068,9 @@ void Statestore::ShutdownForTesting() {
   subscriber_topic_update_threadpool_.Join();
   subscriber_priority_topic_update_threadpool_.Join();
   subscriber_heartbeat_threadpool_.Join();
+  if (thrift_server_ != nullptr) {
+    thrift_server_->StopForTesting();
+  }
 }
 
 int64_t Statestore::FailedExecutorDetectionTimeMs() {

@@ -662,7 +662,7 @@ Status Coordinator::FinalizeHdfsDml() {
   // All instances must have reported their final statuses before finalization, which is a
   // post-condition of Wait. If the query was not successful, still try to clean up the
   // staging directory.
-  DCHECK(has_called_wait_);
+  DCHECK(has_called_wait_.Load());
   DCHECK(finalize_params() != nullptr);
   bool is_transactional = finalize_params()->__isset.write_id;
 
@@ -713,10 +713,10 @@ void Coordinator::WaitForBackends() {
 }
 
 Status Coordinator::Wait() {
+  if (has_called_wait_.Load()) return Status::OK();
   lock_guard<SpinLock> l(wait_lock_);
   SCOPED_TIMER(query_profile_->total_time_counter());
-  if (has_called_wait_) return Status::OK();
-  has_called_wait_ = true;
+  has_called_wait_.Store(true);
 
   if (stmt_type_ == TStmtType::QUERY) {
     DCHECK(coord_instance_ != nullptr);
@@ -741,7 +741,7 @@ Status Coordinator::Wait() {
 Status Coordinator::GetNext(QueryResultSet* results, int max_rows, bool* eos,
     int64_t block_on_wait_time_us) {
   VLOG_ROW << "GetNext() query_id=" << PrintId(query_id());
-  DCHECK(has_called_wait_);
+  DCHECK(has_called_wait_.Load());
   SCOPED_TIMER(query_profile_->total_time_counter());
 
   if (ReturnedAllResults()) {
@@ -964,7 +964,7 @@ void Coordinator::ComputeQuerySummary() {
   // In this case, the query did not even get to start all fragment instances.
   // Some of the state that is used below might be uninitialized.  In this case,
   // the query has made so little progress, reporting a summary is not very useful.
-  if (!has_called_wait_) return;
+  if (!has_called_wait_.Load()) return;
 
   if (backend_states_.empty()) return;
   // make sure fragment_stats_ are up-to-date

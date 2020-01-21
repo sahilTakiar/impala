@@ -175,7 +175,10 @@ void Coordinator::BackendState::Exec(const DebugOptions& debug_options,
     const kudu::Slice& serialized_query_ctx, CountingBarrier* exec_complete_barrier) {
   const auto trigger = MakeScopeExitTrigger([&]() {
     // Ensure that 'last_report_time_ms_' is set prior to the barrier being notified.
-    last_report_time_ms_ = GenerateReportTimestamp();
+    {
+      unique_lock<mutex> lock(lock_);
+      last_report_time_ms_ = GenerateReportTimestamp();
+    }
     exec_complete_barrier->Notify();
   });
 
