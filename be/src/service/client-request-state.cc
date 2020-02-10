@@ -36,6 +36,7 @@
 #include "runtime/mem-tracker.h"
 #include "runtime/row-batch.h"
 #include "runtime/runtime-state.h"
+#include "runtime/query-driver.h"
 #include "scheduling/admission-controller.h"
 #include "scheduling/scheduler.h"
 #include "service/frontend.h"
@@ -987,7 +988,7 @@ void ClientRequestState::RetryQuery(const Status& status) {
 
   // Update the state and then schedule the retry asynchronously.
   MarkAsRetrying(status);
-  parent_server_->RetryAsync(query_id(), status);
+  parent_server_->query_driver()->RetryAsync(query_id(), status);
 }
 
 void ClientRequestState::MarkAsRetrying(const Status& status) {

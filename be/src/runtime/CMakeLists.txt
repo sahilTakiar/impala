@@ -58,6 +58,7 @@ add_library(Runtime
   mem-tracker.cc
   mem-pool.cc
   multi-precision.cc
+  query-driver.cc
   query-exec-mgr.cc
   query-state.cc
   test-env.cc

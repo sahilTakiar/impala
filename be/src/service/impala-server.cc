@@ -66,12 +66,12 @@
 #include "runtime/timestamp-value.h"
 #include "runtime/timestamp-value.inline.h"
 #include "runtime/tmp-file-mgr.h"
+#include "runtime/query-driver.h"
 #include "scheduling/admission-controller.h"
 #include "service/cancellation-work.h"
 #include "service/impala-http-handler.h"
 #include "service/impala-internal-service.h"
 #include "service/client-request-state.h"
-#include "service/retry-work.h"
 #include "service/frontend.h"
 #include "util/auth-util.h"
 #include "util/bit-util.h"
@@ -180,8 +180,6 @@ DEFINE_int32(max_profile_log_files, 10, "Maximum number of profile log files to 
 
 DEFINE_int32(cancellation_thread_pool_size, 5,
     "(Advanced) Size of the thread-pool processing cancellations due to node failure");
-DEFINE_int32(retry_thread_pool_size, 5,
-    "(Advanced) Size of the thread-pool processing query retries");
 
 DEFINE_string(ssl_server_certificate, "", "The full path to the SSL certificate file used"
     " to authenticate Impala to clients. If set, both Beeswax and HiveServer2 ports will "
@@ -337,7 +335,6 @@ const string ImpalaServer::AUDIT_EVENT_LOG_FILE_PREFIX = "impala_audit_event_log
 const string LINEAGE_LOG_FILE_PREFIX = "impala_lineage_log_1.0-";
 
 const uint32_t MAX_CANCELLATION_QUEUE_SIZE = 65536;
-const uint32_t MAX_RETRY_QUEUE_SIZE = 65536;
 
 const string BEESWAX_SERVER_NAME = "beeswax-frontend";
 const string HS2_SERVER_NAME = "hiveserver2-frontend";
@@ -459,11 +456,6 @@ ImpalaServer::ImpalaServer(ExecEnv* exec_env)
       bind<void>(&ImpalaServer::CancelFromThreadPool, this, _1, _2)));
   ABORT_IF_ERROR(cancellation_thread_pool_->Init());
 
-  retry_thread_pool_.reset(new ThreadPool<RetryWork>("impala-server", "retry-worker",
-      FLAGS_retry_thread_pool_size, MAX_RETRY_QUEUE_SIZE,
-      bind<void>(&ImpalaServer::RetryQueryFromThreadPool, this, _1, _2)));
-  ABORT_IF_ERROR(retry_thread_pool_->Init());
-
   // Initialize a session expiry thread which blocks indefinitely until the first session
   // with non-zero timeout value is opened. Note that a session which doesn't specify any
   // idle session timeout value will use the default value FLAGS_idle_session_timeout.
@@ -497,6 +489,8 @@ ImpalaServer::ImpalaServer(ExecEnv* exec_env)
 
   is_coordinator_ = FLAGS_is_coordinator;
   is_executor_ = FLAGS_is_executor;
+
+  query_driver_.reset(new QueryDriver(exec_env, this));
 }
 
 Status ImpalaServer::PopulateAuthorizedProxyConfig(
@@ -1465,123 +1459,6 @@ void ImpalaServer::BlockOnWait(shared_ptr<ClientRequestState>* request_state,
   int64_t fetch_rows_timeout_us = (*request_state)->fetch_rows_timeout_us();
   *timed_out =
       !(*request_state)->BlockOnWait(fetch_rows_timeout_us, block_on_wait_time_us);
-}
-
-void ImpalaServer::RetryAsync(const TUniqueId& query_id, const Status& error) {
-  retry_thread_pool_->Offer(RetryWork(query_id, error));
-}
-
-void ImpalaServer::RetryQueryFromThreadPool(
-    uint32_t thread_id, const RetryWork& retry_work) {
-  // TODO add some jitter here to simulate delays in threadpool execution
-  const TUniqueId& query_id = retry_work.query_id();
-  string retry_failed_msg = Substitute("Failed to retry query $0", PrintId(query_id));
-  VLOG_QUERY << Substitute("Retrying query $0 with error message $1", PrintId(query_id),
-      retry_work.error().GetDetail());
-  shared_ptr<ClientRequestState> request_state = GetClientRequestState(query_id);
-  DCHECK(request_state != nullptr);
-  DCHECK(request_state->retry_state() == ClientRequestState::RetryState::RETRYING)
-      << Substitute("query=$0 unexpected state $1", PrintId(request_state->query_id()),
-          request_state->ExecStateToString(request_state->exec_state()));
-
-  // Cancel the query.
-  Status status = request_state->Cancel(true, nullptr);
-  if (!status.ok()) {
-    status.AddDetail(retry_failed_msg + " cancellation failed");
-    discard_result(request_state->UpdateQueryStatus(status));
-    return;
-  }
-
-  // Copy the TExecRequest from the original query and reset it.
-  unique_ptr<TExecRequest> retry_exec_request =
-      make_unique<TExecRequest>(request_state->exec_request());
-  const TQueryCtx& query_ctx = retry_exec_request->query_exec_request.query_ctx;
-  PrepareQueryContext(&retry_exec_request->query_exec_request.query_ctx);
-
-  // Copy the TUniqueId query_id from the original query.
-  unique_ptr<TUniqueId> original_query_id =
-      make_unique<TUniqueId>(request_state->query_id());
-
-  // Create the ClientRequestState for the new query.
-  shared_ptr<ClientRequestState> retry_request_state;
-  retry_request_state.reset(
-      new ClientRequestState(query_ctx, exec_env_, exec_env_->frontend(), this,
-          request_state->session(), move(retry_exec_request)));
-  retry_request_state->set_retried_id(move(original_query_id));
-  retry_request_state->set_user_profile_access(
-      retry_request_state->exec_request().user_has_profile_access);
-  if (retry_request_state->exec_request().__isset.result_set_metadata) {
-    retry_request_state->set_result_metadata(
-        retry_request_state->exec_request().result_set_metadata);
-  }
-
-  // The steps below mimic what is done when a query is first launched. See
-  // ImpalaServer::ExecuteStatement.
-
-  // Register the new query.
-  MarkSessionActive(request_state->session());
-  status = RegisterQuery(request_state->session(), retry_request_state);
-  if (!status.ok()) {
-    status.AddDetail(
-        retry_failed_msg + Substitute(" registration for new query with id $0 failed",
-                               PrintId(retry_request_state->query_id())));
-    discard_result(request_state->UpdateQueryStatus(status));
-    UnregisterQueryDiscardResult(retry_request_state->query_id(), false, &status);
-    return;
-  }
-
-  // Run the new query.
-  status = retry_request_state->Exec();
-  if (!status.ok()) {
-    status.AddDetail(
-        retry_failed_msg + Substitute(" Exec for new query with id $0 failed",
-                               PrintId(retry_request_state->query_id())));
-    discard_result(request_state->UpdateQueryStatus(status));
-    UnregisterQueryDiscardResult(retry_request_state->query_id(), false, &status);
-    return;
-  }
-
-  status = retry_request_state->WaitAsync();
-  if (!status.ok()) {
-    status.AddDetail(retry_failed_msg
-        + Substitute(" WaitAsync for new query with id $0 failed with error $0",
-                         PrintId(retry_request_state->query_id())));
-    discard_result(request_state->UpdateQueryStatus(status));
-    UnregisterQueryDiscardResult(retry_request_state->query_id(), false, &status);
-    return;
-  }
-
-  // Mark the new query as "in flight".
-  status = SetQueryInflight(request_state->session(), retry_request_state);
-  if (!status.ok()) {
-    status.AddDetail(
-        retry_failed_msg + Substitute(" SetQueryInFlight for new query with id $0 failed",
-                               PrintId(retry_request_state->query_id())));
-    discard_result(request_state->UpdateQueryStatus(status));
-    UnregisterQueryDiscardResult(retry_request_state->query_id(), false, &status);
-    return;
-  }
-
-  // Associate the old query_id with the new ClientRequestState so that existing
-  // QueryHandles still work.
-  {
-    boost::lock_guard<SpinLock> l(client_query_id_mapping_lock_);
-    auto it = client_query_id_mapping_.find(query_id);
-    DCHECK(it == client_query_id_mapping_.end()) << PrintId(query_id);
-    client_query_id_mapping_[query_id] = retry_request_state->query_id();
-  }
-
-  // Mark the original query as successfully retried.
-  request_state->MarkAsRetried(retry_request_state->query_id());
-  VLOG_QUERY << Substitute("Retried query $0 with new query id $0", PrintId(query_id),
-      PrintId(retry_request_state->query_id()));
-
-  discard_result(
-      client_request_state_map_.DeleteClientRequestState(query_id, &request_state));
-
-  // Close the old query.
-  CloseClientRequestState(request_state);
-  MarkSessionInactive(request_state->session());
 }
 
 void ImpalaServer::CancelFromThreadPool(uint32_t thread_id,

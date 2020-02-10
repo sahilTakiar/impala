@@ -62,7 +62,6 @@ class ExecEnv;
 class DataSink;
 class CancellationWork;
 class ImpalaHttpHandler;
-class RetryWork;
 class RowDescriptor;
 class TDmlResult;
 class TNetworkAddress;
@@ -74,6 +73,7 @@ class TGetExecSummaryResp;
 class TGetExecSummaryReq;
 class ClientRequestState;
 class QuerySchedule;
+class QueryDriver;
 
 /// An ImpalaServer contains both frontend and backend functionality;
 /// it implements ImpalaService (Beeswax), ImpalaHiveServer2Service (HiveServer2)
@@ -350,10 +350,6 @@ class ImpalaServer : public ImpalaServiceIf,
   void UpdateFilter(UpdateFilterResultPB* return_val, const UpdateFilterParamsPB& params,
       kudu::rpc::RpcContext* context);
 
-  /// Schedule a retry of the query with the given query_id. The retry will be done
-  /// asynchronously by a dedicated threadpool.
-  void RetryAsync(const TUniqueId& query_id, const Status& error);
-
   /// Generates a unique id for this query and sets it in the given query context.
   /// Prepares the given query context by populating fields required for evaluating
   /// certain expressions, such as now(), pid(), etc. Should be called before handing
@@ -500,6 +496,10 @@ class ImpalaServer : public ImpalaServiceIf,
   /// Appends the lineage_entry to lineage_logger_.
   Status AppendLineageEntry(const std::string& lineage_entry);
 
+  QueryDriver* query_driver() const {
+    return query_driver_.get();
+  }
+
   // Mapping between query option names and levels
   QueryOptionLevels query_option_levels_;
 
@@ -638,6 +638,7 @@ class ImpalaServer : public ImpalaServiceIf,
   friend class ImpalaHttpHandler;
   friend struct SessionState;
   friend class ImpalaServerTest;
+  friend class QueryDriver;
 
   boost::scoped_ptr<ImpalaHttpHandler> http_handler_;
 
@@ -1002,14 +1003,6 @@ class ImpalaServer : public ImpalaServiceIf,
   void CancelFromThreadPool(uint32_t thread_id,
       const CancellationWork& cancellation_work);
 
-  /// Helper method to process query retries, called from the query retry thread pool. The
-  /// RetryWork contains the query id to retry and the reason the query failed. The failed
-  /// query is cancelled, and then a new ClientRequestState is created for the retried
-  /// query. The new ClientRequestState copies the TExecRequest from the failed query in
-  /// order to avoid query compilation and planning again. Once the new query is
-  /// registered and launched, the failed query is unregistered.
-  void RetryQueryFromThreadPool(uint32_t thread_id, const RetryWork& retry_work);
-
   /// Helper method to add the pool name and query options to the query_ctx. Must be
   /// called before ExecuteInternal() at which point the TQueryCtx is const and cannot
   /// be mutated. override_options_mask indicates which query options can be overridden
@@ -1109,10 +1102,6 @@ class ImpalaServer : public ImpalaServiceIf,
   /// avoid blocking the statestore callback.
   boost::scoped_ptr<ThreadPool<CancellationWork>> cancellation_thread_pool_;
 
-  /// Thread pool to process query retry requests that come from query state updates to
-  /// avoid blocking control service RPC threads.
-  boost::scoped_ptr<ThreadPool<RetryWork>> retry_thread_pool_;
-
   /// Thread that runs SessionMaintenance. It will wake up periodically to check for
   /// sessions which are idle for more their timeout values.
   std::unique_ptr<Thread> session_maintenance_thread_;
@@ -1145,6 +1134,8 @@ class ImpalaServer : public ImpalaServiceIf,
   /// Default query options in the form of TQueryOptions and beeswax::ConfigVariable
   TQueryOptions default_query_options_;
   std::vector<beeswax::ConfigVariable> default_configs_;
+
+  std::unique_ptr<QueryDriver> query_driver_;
 
   // Container for a secret passed into functions for validation.
   class SecretArg {
