@@ -91,7 +91,8 @@ static const string TABLES_WITH_MISSING_DISK_IDS_KEY = "Tables With Missing Disk
 ClientRequestState::ClientRequestState(
     const TQueryCtx& query_ctx, ExecEnv* exec_env, Frontend* frontend,
     ImpalaServer* server, shared_ptr<ImpalaServer::SessionState> session,
-    unique_ptr<TExecRequest> exec_request)
+    unique_ptr<TExecRequest> exec_request,
+    const shared_ptr<QueryDriver>& query_driver)
   : query_ctx_(query_ctx),
     last_active_time_ms_(numeric_limits<int64_t>::max()),
     child_query_executor_(new ChildQueryExecutor),
@@ -107,7 +108,8 @@ ClientRequestState::ClientRequestState(
     frontend_(frontend),
     parent_server_(server),
     start_time_us_(UnixMicros()),
-    fetch_rows_timeout_us_(MICROS_PER_MILLI * query_options().fetch_rows_timeout_ms) {
+    fetch_rows_timeout_us_(MICROS_PER_MILLI * query_options().fetch_rows_timeout_ms),
+    parent_driver_(query_driver) {
 #ifndef NDEBUG
   profile_->AddInfoString("DEBUG MODE WARNING", "Query profile created while running a "
       "DEBUG build of Impala. Use RELEASE builds to measure query performance.");
@@ -988,7 +990,7 @@ void ClientRequestState::RetryQuery(const Status& status) {
 
   // Update the state and then schedule the retry asynchronously.
   MarkAsRetrying(status);
-  parent_server_->query_driver()->RetryAsync(query_id(), status);
+  parent_driver_->RetryAsync(query_id(), status);
 }
 
 void ClientRequestState::MarkAsRetrying(const Status& status) {

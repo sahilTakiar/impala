@@ -28,6 +28,7 @@
 #include "runtime/exec-env.h"
 #include "runtime/mem-tracker.h"
 #include "runtime/query-exec-mgr.h"
+#include "runtime/query-driver.h"
 #include "runtime/query-state.h"
 #include "service/client-request-state.h"
 #include "service/impala-server.h"
@@ -166,7 +167,8 @@ void ControlService::ReportExecStatus(const ReportExecStatusRequestPB* request,
     ReportExecStatusResponsePB* response, RpcContext* rpc_context) {
   const TUniqueId query_id = ProtoToQueryId(request->query_id());
   shared_ptr<ClientRequestState> request_state =
-      ExecEnv::GetInstance()->impala_server()->GetClientRequestState(query_id);
+      ExecEnv::GetInstance()->impala_server()->GetQueryDriver(query_id)->GetClientRequestState(
+          query_id);
 
   // This failpoint is to allow jitter to be injected.
   DebugActionNoFail(FLAGS_debug_actions, "REPORT_EXEC_STATUS_DELAY");

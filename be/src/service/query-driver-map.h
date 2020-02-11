@@ -22,21 +22,20 @@
 
 namespace impala {
 
-class ClientRequestState;
+class QueryDriver;
 
-/// A ShardedQueryMap for ClientRequestStates. Maps a query_id to its corresponding
-/// ClientRequestState. Provides helper methods to easily add and delete
-/// ClientRequestStates from a ShardedQueryMap. The ClientRequestStates are non-const, so
-/// users of this class need to synchronize access to the ClientRequestStates either by
-/// creating a ScopedShardedMapRef or by locking on the ClientRequestState::lock().
-class ClientRequestStateMap
-    : public ShardedQueryMap<std::shared_ptr<ClientRequestState>> {
+/// A ShardedQueryMap for QueryDrivers. Maps a query_id to its corresponding
+/// QueryDriver. Provides helper methods to easily add and delete
+/// QueryDrivers from a ShardedQueryMap. The QueryDrivers are non-const, so
+/// users of this class need to synchronize access to the QueryDrivers either by
+/// creating a ScopedShardedMapRef or by locking on the QueryDriver::lock().
+class QueryDriverMap : public ShardedQueryMap<std::shared_ptr<QueryDriver>> {
  public:
-  /// Adds the given (query_id, request_state) pair to the map. Returns an error Status
+  /// Adds the given (query_id, query_driver) pair to the map. Returns an error Status
   /// if the query id already exists in the map.
-  Status AddClientRequestState(
-      const TUniqueId& query_id, std::shared_ptr<ClientRequestState> request_state) {
-    ScopedShardedMapRef<std::shared_ptr<ClientRequestState>> map_ref(query_id, this);
+  Status AddQueryDriver(
+      const TUniqueId& query_id, std::shared_ptr<QueryDriver> query_driver) {
+    ScopedShardedMapRef<std::shared_ptr<QueryDriver>> map_ref(query_id, this);
     DCHECK(map_ref.get() != nullptr);
 
     auto entry = map_ref->find(query_id);
@@ -46,17 +45,17 @@ class ClientRequestStateMap
       return Status(ErrorMsg(TErrorCode::INTERNAL_ERROR,
           strings::Substitute("query id $0 already exists", PrintId(query_id))));
     }
-    map_ref->insert(make_pair(query_id, request_state));
+    map_ref->insert(make_pair(query_id, query_driver));
     return Status::OK();
   }
 
-  /// Deletes the specified (query_id, request_state) pair from the map and sets the given
-  /// request_state pointer to the ClientRequestState associated with the given query_id.
-  /// If request_state == nullptr, it is not set. Returns an error Status if the query_id
+  /// Deletes the specified (query_id, query_driver) pair from the map and sets the given
+  /// query_driver pointer to the QueryDriver associated with the given query_id.
+  /// If query_driver == nullptr, it is not set. Returns an error Status if the query_id
   /// cannot be found in the map.
-  Status DeleteClientRequestState(const TUniqueId& query_id,
-      std::shared_ptr<ClientRequestState>* request_state = nullptr) {
-    ScopedShardedMapRef<std::shared_ptr<ClientRequestState>> map_ref(query_id, this);
+  Status DeleteQueryDriver(
+      const TUniqueId& query_id, std::shared_ptr<QueryDriver>* query_driver = nullptr) {
+    ScopedShardedMapRef<std::shared_ptr<QueryDriver>> map_ref(query_id, this);
     DCHECK(map_ref.get() != nullptr);
     auto entry = map_ref->find(query_id);
     if (entry == map_ref->end()) {
@@ -64,8 +63,8 @@ class ClientRequestStateMap
           strings::Substitute("Invalid or unknown query handle $0", PrintId(query_id));
       VLOG(1) << error_msg;
       return Status::Expected(error_msg);
-    } else if (request_state != nullptr) {
-      *request_state = entry->second;
+    } else if (query_driver != nullptr) {
+      *query_driver = entry->second;
     }
     map_ref->erase(entry);
     return Status::OK();

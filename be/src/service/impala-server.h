@@ -39,7 +39,7 @@
 #include "runtime/timestamp-value.h"
 #include "runtime/types.h"
 #include "scheduling/query-schedule.h"
-#include "service/client-request-state-map.h"
+#include "service/query-driver-map.h"
 #include "service/query-options.h"
 #include "statestore/statestore-subscriber.h"
 #include "util/condition-variable.h"
@@ -496,10 +496,6 @@ class ImpalaServer : public ImpalaServiceIf,
   /// Appends the lineage_entry to lineage_logger_.
   Status AppendLineageEntry(const std::string& lineage_entry);
 
-  QueryDriver* query_driver() const {
-    return query_driver_.get();
-  }
-
   // Mapping between query option names and levels
   QueryOptionLevels query_option_levels_;
 
@@ -648,16 +644,6 @@ class ImpalaServer : public ImpalaServiceIf,
   static const char* SQLSTATE_GENERAL_ERROR;
   static const char* SQLSTATE_OPTIONAL_FEATURE_NOT_IMPLEMENTED;
 
-  /// Return exec state for given query_id, or NULL if not found.
-  std::shared_ptr<ClientRequestState> GetClientRequestState(
-      const TUniqueId& query_id);
-
-  /// Return exec state for given query_id, or NULL if not found. Unlike
-  // GetClientRequestState, this method uses the mapping defined in
-  // 'client_query_id_mapping_' to map query ids to other query ids.
-  std::shared_ptr<ClientRequestState> GetClientFacingRequestState(
-      const TUniqueId& query_id);
-
   /// Used in situations where the client provides a session ID and a query ID and the
   /// caller needs to validate that the query can be accessed from the session. The two
   /// arguments are the session obtained by looking up the session ID provided by the
@@ -692,8 +678,11 @@ class ImpalaServer : public ImpalaServiceIf,
   /// Registers the query exec state with client_request_state_map_ using the
   /// globally unique query_id.
   /// The caller must have checked out the session state.
-  Status RegisterQuery(std::shared_ptr<SessionState> session_state,
-      const std::shared_ptr<ClientRequestState>& exec_state) WARN_UNUSED_RESULT;
+  Status RegisterQuery(const TUniqueId& query_id,
+      std::shared_ptr<SessionState> session_state,
+      const std::shared_ptr<QueryDriver>& query_driver) WARN_UNUSED_RESULT;
+
+  std::shared_ptr<QueryDriver> GetQueryDriver(const TUniqueId& query_id);
 
   /// Adds the query to the set of in-flight queries for the session. The query remains
   /// in-flight until the query is unregistered.  Until a query is in-flight, an attempt
@@ -720,8 +709,8 @@ class ImpalaServer : public ImpalaServiceIf,
   void UnregisterQueryDiscardResult(
       const TUniqueId& query_id, bool check_inflight, const Status* cause = NULL);
 
-  Status DeleteClientFacingRequestState(
-      const TUniqueId& query_id, std::shared_ptr<ClientRequestState>* request_state);
+  Status DeleteQueryDriver(
+      const TUniqueId& query_id, std::shared_ptr<QueryDriver>* query_driver);
 
   /// Performs any final cleanup necessary before the given ClientRequestState goes out
   /// of scope and is deleted. Marks the given ClientRequestState as done, removes the
@@ -1119,23 +1108,11 @@ class ImpalaServer : public ImpalaServiceIf,
   /// Thread that runs UnresponsiveBackendThread().
   std::unique_ptr<Thread> unresponsive_backend_thread_;
 
-  SpinLock client_query_id_mapping_lock_;
-
-  /// Used to route client requests to other query ids. An entry in the map is of the
-  /// form '(query_id_1, query_id_2)' where client requests for 'query_id_1' get mapped
-  /// to requests for 'query_id_2'.
-  std::unordered_map<TUniqueId, TUniqueId> client_query_id_mapping_;
-
-  /// A ClientRequestStateMap maps query ids to ClientRequestStates. The
-  /// ClientRequestStates are owned by the ImpalaServer and ClientRequestStateMap
-  /// references them using shared_ptr to allow asynchronous deletion.
-  ClientRequestStateMap client_request_state_map_;
+  QueryDriverMap query_driver_map_;
 
   /// Default query options in the form of TQueryOptions and beeswax::ConfigVariable
   TQueryOptions default_query_options_;
   std::vector<beeswax::ConfigVariable> default_configs_;
-
-  std::unique_ptr<QueryDriver> query_driver_;
 
   // Container for a secret passed into functions for validation.
   class SecretArg {

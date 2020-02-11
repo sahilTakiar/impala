@@ -74,7 +74,8 @@ class ClientRequestState {
  public:
   ClientRequestState(const TQueryCtx& query_ctx, ExecEnv* exec_env, Frontend* frontend,
       ImpalaServer* server, std::shared_ptr<ImpalaServer::SessionState> session,
-      std::unique_ptr<TExecRequest> exec_request);
+      std::unique_ptr<TExecRequest> exec_request,
+      const std::shared_ptr<QueryDriver>& query_driver);
 
   ~ClientRequestState();
 
@@ -360,7 +361,9 @@ class ClientRequestState {
     return *retried_id_;
   }
 
-protected:
+  const std::shared_ptr<QueryDriver>& parent_driver() const { return parent_driver_; }
+
+ protected:
   /// Updates the end_time_us_ of this query if it isn't set. The end time is determined
   /// when this function is called for the first time, calling it multiple times does not
   /// change the end time.
@@ -583,6 +586,8 @@ protected:
   /// Condition variable used to signal the threads that are waiting until the query has
   /// been retried.
   ConditionVariable block_until_retried_cv_;
+
+  const std::shared_ptr<QueryDriver>& parent_driver_;
 
   /// Executes a local catalog operation (an operation that does not need to execute
   /// against the catalog service). Includes USE, SHOW, DESCRIBE, and EXPLAIN statements.

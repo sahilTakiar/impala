@@ -24,6 +24,7 @@
 #include "runtime/exec-env.h"
 #include "runtime/raw-value.inline.h"
 #include "runtime/timestamp-value.h"
+#include "runtime/query-driver.h"
 #include "service/client-request-state.h"
 #include "service/frontend.h"
 #include "service/query-options.h"
@@ -175,7 +176,7 @@ void ImpalaServer::fetch(Results& query_results, const QueryHandle& query_handle
   QueryHandleToTUniqueId(query_handle, &query_id);
   VLOG_ROW << "fetch(): query_id=" << PrintId(query_id) << " fetch_size=" << fetch_size;
 
-  shared_ptr<ClientRequestState> request_state = GetClientFacingRequestState(query_id);
+  shared_ptr<ClientRequestState> request_state = GetQueryDriver(query_id)->GetClientRequestState();
   if (UNLIKELY(request_state == nullptr)) {
     string err_msg = Substitute("Invalid query handle: $0", PrintId(query_id));
     VLOG(1) << err_msg;
@@ -206,7 +207,7 @@ void ImpalaServer::get_results_metadata(ResultsMetadata& results_metadata,
   TUniqueId query_id;
   QueryHandleToTUniqueId(handle, &query_id);
   VLOG_QUERY << "get_results_metadata(): query_id=" << PrintId(query_id);
-  shared_ptr<ClientRequestState> request_state = GetClientFacingRequestState(query_id);
+  shared_ptr<ClientRequestState> request_state = GetQueryDriver(query_id)->GetClientRequestState();
   if (UNLIKELY(request_state.get() == nullptr)) {
     RaiseBeeswaxException(Substitute("Invalid query handle: $0", PrintId(query_id)),
       SQLSTATE_GENERAL_ERROR);
@@ -272,7 +273,7 @@ beeswax::QueryState::type ImpalaServer::get_state(const QueryHandle& handle) {
   QueryHandleToTUniqueId(handle, &query_id);
   VLOG_ROW << "get_state(): query_id=" << PrintId(query_id);
 
-  shared_ptr<ClientRequestState> request_state = GetClientFacingRequestState(query_id);
+  shared_ptr<ClientRequestState> request_state = GetQueryDriver(query_id)->GetClientRequestState();
   if (UNLIKELY(request_state == nullptr)) {
     VLOG_QUERY << "ImpalaServer::get_state invalid handle";
     RaiseBeeswaxException(Substitute("Invalid query handle: $0", PrintId(query_id)),
@@ -313,7 +314,7 @@ void ImpalaServer::get_log(string& log, const LogContextId& context) {
   TUniqueId query_id;
   QueryHandleToTUniqueId(handle, &query_id);
 
-  shared_ptr<ClientRequestState> request_state = GetClientFacingRequestState(query_id);
+  shared_ptr<ClientRequestState> request_state = GetQueryDriver(query_id)->GetClientRequestState();
   if (request_state.get() == nullptr) {
     stringstream str;
     str << "unknown query id: " << PrintId(query_id);
@@ -598,7 +599,7 @@ Status ImpalaServer::FetchInternal(TUniqueId query_id, const bool start_over,
 
 Status ImpalaServer::CloseInsertInternal(SessionState* session, const TUniqueId& query_id,
     TDmlResult* dml_result) {
-  shared_ptr<ClientRequestState> request_state = GetClientFacingRequestState(query_id);
+  shared_ptr<ClientRequestState> request_state = GetQueryDriver(query_id)->GetClientRequestState();
   if (UNLIKELY(request_state == nullptr)) {
     string err_msg = Substitute("Invalid query handle: $0", PrintId(query_id));
     VLOG(1) << err_msg;

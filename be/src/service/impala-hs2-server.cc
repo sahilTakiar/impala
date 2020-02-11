@@ -42,6 +42,7 @@
 #include "runtime/coordinator.h"
 #include "runtime/exec-env.h"
 #include "runtime/raw-value.h"
+#include "runtime/query-driver.h"
 #include "scheduling/admission-controller.h"
 #include "service/client-request-state.h"
 #include "service/hs2-util.h"
@@ -144,9 +145,11 @@ void ImpalaServer::ExecuteMetadataOp(const THandleIdentifier& session_handle,
       "N/A" : query_text_it->second;
   query_ctx.client_request.stmt = query_text;
   unique_ptr<TExecRequest> exec_request = make_unique<TExecRequest>();
+  shared_ptr<QueryDriver> query_driver;
+  query_driver.reset(new QueryDriver(exec_env_, this, request_state));
   request_state.reset(new ClientRequestState(query_ctx, exec_env_,
-      exec_env_->frontend(), this, session, move(exec_request)));
-  Status register_status = RegisterQuery(session, request_state);
+      exec_env_->frontend(), this, session, move(exec_request), query_driver));
+  Status register_status = RegisterQuery(query_ctx.query_id, session, query_driver);
   if (!register_status.ok()) {
     status->__set_statusCode(thrift::TStatusCode::ERROR_STATUS);
     status->__set_errorMessage(register_status.GetDetail());
@@ -706,7 +709,7 @@ void ImpalaServer::GetOperationStatus(TGetOperationStatusResp& return_val,
       SQLSTATE_GENERAL_ERROR);
   VLOG_ROW << "GetOperationStatus(): query_id=" << PrintId(query_id);
 
-  shared_ptr<ClientRequestState> request_state = GetClientFacingRequestState(query_id);
+  shared_ptr<ClientRequestState> request_state = GetQueryDriver(query_id)->GetClientRequestState();
   if (UNLIKELY(request_state.get() == nullptr)) {
     // No handle was found
     HS2_RETURN_ERROR(return_val,
@@ -748,7 +751,7 @@ void ImpalaServer::CancelOperation(TCancelOperationResp& return_val,
       SQLSTATE_GENERAL_ERROR);
   VLOG_QUERY << "CancelOperation(): query_id=" << PrintId(query_id);
 
-  shared_ptr<ClientRequestState> request_state = GetClientFacingRequestState(query_id);
+  shared_ptr<ClientRequestState> request_state = GetQueryDriver(query_id)->GetClientRequestState();
   if (UNLIKELY(request_state.get() == nullptr)) {
     // No handle was found
     HS2_RETURN_ERROR(return_val,
@@ -781,7 +784,7 @@ void ImpalaServer::CloseImpalaOperation(TCloseImpalaOperationResp& return_val,
       SQLSTATE_GENERAL_ERROR);
   VLOG_QUERY << "CloseOperation(): query_id=" << PrintId(query_id);
 
-  shared_ptr<ClientRequestState> request_state = GetClientFacingRequestState(query_id);
+  shared_ptr<ClientRequestState> request_state = GetQueryDriver(query_id)->GetClientRequestState();
   if (UNLIKELY(request_state.get() == nullptr)) {
     // No handle was found
     HS2_RETURN_ERROR(return_val,
@@ -815,7 +818,7 @@ void ImpalaServer::GetResultSetMetadata(TGetResultSetMetadataResp& return_val,
       SQLSTATE_GENERAL_ERROR);
   VLOG_QUERY << "GetResultSetMetadata(): query_id=" << PrintId(query_id);
 
-  shared_ptr<ClientRequestState> request_state = GetClientFacingRequestState(query_id);
+  shared_ptr<ClientRequestState> request_state = GetQueryDriver(query_id)->GetClientRequestState();
   if (UNLIKELY(request_state.get() == nullptr)) {
     VLOG_QUERY << "GetResultSetMetadata(): invalid query handle";
     // No handle was found
@@ -869,7 +872,7 @@ void ImpalaServer::FetchResults(TFetchResultsResp& return_val,
   VLOG_ROW << "FetchResults(): query_id=" << PrintId(query_id)
            << " fetch_size=" << request.maxRows;
 
-  shared_ptr<ClientRequestState> request_state = GetClientFacingRequestState(query_id);
+  shared_ptr<ClientRequestState> request_state = GetQueryDriver(query_id)->GetClientRequestState();
   if (UNLIKELY(request_state == nullptr)) {
     string err_msg = Substitute("Invalid query handle: $0", PrintId(query_id));
     VLOG(1) << err_msg;
@@ -915,7 +918,7 @@ void ImpalaServer::GetLog(TGetLogResp& return_val, const TGetLogReq& request) {
       request.operationHandle.operationId, &query_id, &op_secret),
       SQLSTATE_GENERAL_ERROR);
 
-  shared_ptr<ClientRequestState> request_state = GetClientFacingRequestState(query_id);
+  shared_ptr<ClientRequestState> request_state = GetQueryDriver(query_id)->GetClientRequestState();
   if (UNLIKELY(request_state.get() == nullptr)) {
     // No handle was found
     HS2_RETURN_ERROR(return_val,
