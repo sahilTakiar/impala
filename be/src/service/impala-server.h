@@ -668,19 +668,18 @@ class ImpalaServer : public ImpalaServiceIf,
   /// session_state is a ptr to the session running this query and must have been checked
   /// out.
   Status Execute(TQueryCtx* query_ctx, std::shared_ptr<SessionState> session_state,
-      std::shared_ptr<ClientRequestState>* exec_state) WARN_UNUSED_RESULT;
+      ClientRequestState*& exec_state) WARN_UNUSED_RESULT;
 
-  /// Implements Execute() logic, but doesn't unregister query on error.
   Status ExecuteInternal(const TQueryCtx& query_ctx,
-      std::shared_ptr<SessionState> session_state, bool* registered_exec_state,
-      std::shared_ptr<ClientRequestState>* exec_state) WARN_UNUSED_RESULT;
+      std::shared_ptr<SessionState> session_state, bool* registered_request_state,
+      ClientRequestState*& request_state);
 
   /// Registers the query exec state with client_request_state_map_ using the
   /// globally unique query_id.
   /// The caller must have checked out the session state.
   Status RegisterQuery(const TUniqueId& query_id,
       std::shared_ptr<SessionState> session_state,
-      const std::shared_ptr<QueryDriver>& query_driver) WARN_UNUSED_RESULT;
+      std::shared_ptr<QueryDriver> query_driver) WARN_UNUSED_RESULT;
 
   std::shared_ptr<QueryDriver> GetQueryDriver(const TUniqueId& query_id);
 
@@ -694,7 +693,7 @@ class ImpalaServer : public ImpalaServiceIf,
   /// The query must have already been registered using RegisterQuery().  The caller
   /// must have checked out the session state.
   Status SetQueryInflight(std::shared_ptr<SessionState> session_state,
-      const std::shared_ptr<ClientRequestState>& exec_state) WARN_UNUSED_RESULT;
+      ClientRequestState* exec_state) WARN_UNUSED_RESULT;
 
   /// Unregister the query by cancelling it, removing exec_state from
   /// client_request_state_map_, and removing the query id from session state's
@@ -716,7 +715,7 @@ class ImpalaServer : public ImpalaServiceIf,
   /// of scope and is deleted. Marks the given ClientRequestState as done, removes the
   /// query from the inflight queries list, updates query_locations_, and archives the
   /// query. Used when unregistering the query.
-  void CloseClientRequestState(const std::shared_ptr<ClientRequestState>& request_state);
+  void CloseClientRequestState(ClientRequestState* request_state);
 
   /// Initiates query cancellation reporting the given cause as the query status.
   /// Assumes deliberate cancellation by the user if the cause is NULL.  Returns an
@@ -759,7 +758,7 @@ class ImpalaServer : public ImpalaServiceIf,
       TExecSummary* result) WARN_UNUSED_RESULT;
 
   /// Collect ExecSummary and update it to the profile in request_state
-  void UpdateExecSummary(std::shared_ptr<ClientRequestState> request_state) const;
+  void UpdateExecSummary(ClientRequestState* request_state) const;
 
   /// Initialize "default_configs_" to show the default values for ImpalaQueryOptions and
   /// "support_start_over/false" to indicate that Impala does not support start over
@@ -978,11 +977,11 @@ class ImpalaServer : public ImpalaServiceIf,
   /// Blocks until results are available. Handles any query retries that might occur
   /// while waiting for results to be produced.
   void WaitForResults(const TUniqueId& query_id,
-      std::shared_ptr<ClientRequestState>* request_state, int64_t* block_on_wait_time_us,
+      ClientRequestState*& request_state, int64_t* block_on_wait_time_us,
       bool* timed_out);
 
   /// Blocks until results are ready to be fetched, or until the given timeout is hit.
-  void BlockOnWait(std::shared_ptr<ClientRequestState>* request_state, bool* timed_out,
+  void BlockOnWait(ClientRequestState* request_state, bool* timed_out,
       int64_t* block_on_wait_time_us);
 
   /// Helper method to process cancellations that result from failed backends, called from

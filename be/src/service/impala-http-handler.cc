@@ -789,9 +789,9 @@ void ImpalaHttpHandler::QueryBackendsHandler(
     return;
   }
 
-  shared_ptr<ClientRequestState> request_state =
+  ClientRequestState* request_state =
       server_->GetQueryDriver(query_id)->GetClientRequestState(query_id);
-  if (request_state.get() == nullptr || request_state->GetCoordinator() == nullptr) {
+  if (request_state == nullptr || request_state->GetCoordinator() == nullptr) {
     return;
   }
 
@@ -811,9 +811,9 @@ void ImpalaHttpHandler::QueryFInstancesHandler(
     return;
   }
 
-  shared_ptr<ClientRequestState> request_state =
+  ClientRequestState* request_state =
       server_->GetQueryDriver(query_id)->GetClientRequestState(query_id);
-  if (request_state.get() == nullptr || request_state->GetCoordinator() == nullptr) {
+  if (request_state == nullptr || request_state->GetCoordinator() == nullptr) {
     return;
   }
 
@@ -842,7 +842,7 @@ void ImpalaHttpHandler::QuerySummaryHandler(bool include_json_plan, bool include
 
   // Search the in-flight queries first, followed by the archived ones.
   {
-    shared_ptr<ClientRequestState> request_state =
+    ClientRequestState* request_state =
         server_->GetQueryDriver(query_id)->GetClientRequestState(query_id);
     if (request_state != nullptr) {
       found = true;
@@ -1039,8 +1039,7 @@ void ImpalaHttpHandler::AdmissionStateHandler(
   server_->query_driver_map_.DoFuncForAllEntries([&running_queries](
       const std::shared_ptr<QueryDriver>& query_driver) {
     // Make sure only queries past admission control are added.
-    const shared_ptr<ClientRequestState>& request_state =
-        query_driver->GetClientRequestState();
+    ClientRequestState* request_state = query_driver->GetClientRequestState();
     auto query_state = request_state->exec_state();
     if (query_state != ClientRequestState::ExecState::INITIALIZED
         && query_state != ClientRequestState::ExecState::PENDING

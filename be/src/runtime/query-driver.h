@@ -20,6 +20,7 @@
 #include <unordered_map>
 
 #include "common/status.h"
+#include "service/impala-server.h"
 #include "service/retry-work.h"
 #include "util/thread-pool.h"
 
@@ -29,17 +30,21 @@ namespace impala {
 
 class ClientRequestState;
 class ExecEnv;
-class ImpalaServer;
-class SessionState;
+class TExecRequest;
 
 class QueryDriver {
  public:
-  QueryDriver(ExecEnv* exec_env_, ImpalaServer* parent_server,
-      std::shared_ptr<ClientRequestState> client_request_state);
+  QueryDriver(ExecEnv* exec_env_, ImpalaServer* parent_server);
 
-  std::shared_ptr<ClientRequestState> GetClientRequestState(const TUniqueId& query_id);
+  void CreateClientRequestState(const TQueryCtx& query_ctx,
+      std::shared_ptr<ImpalaServer::SessionState> session_state,
+      ClientRequestState*& client_request_state);
 
-  std::shared_ptr<ClientRequestState> GetClientRequestState();
+  Status RunFrontendPlanner(const TQueryCtx& query_ctx);
+
+  ClientRequestState* GetClientRequestState(const TUniqueId& query_id);
+
+  ClientRequestState* GetClientRequestState();
 
   /// Schedule a retry of the query with the given query_id. The retry will be done
   /// asynchronously by a dedicated threadpool.
@@ -58,8 +63,10 @@ class QueryDriver {
   ImpalaServer* parent_server_;
 
   SpinLock client_request_state_lock_;
-  std::shared_ptr<ClientRequestState> client_request_state_;
-  std::shared_ptr<ClientRequestState> retried_client_request_state_;
+  std::unique_ptr<ClientRequestState> client_request_state_;
+  std::unique_ptr<ClientRequestState> retried_client_request_state_;
+  std::unique_ptr<TExecRequest> exec_request_;
+  std::unique_ptr<TExecRequest> retry_exec_request_;
 
   /// Thread pool to process query retry requests that come from query state updates to
   /// avoid blocking control service RPC threads.

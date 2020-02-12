@@ -487,10 +487,16 @@ Status Coordinator::FinishBackendStartup() {
     }
     if (!backend_state->exec_rpc_status().ok()) {
       // The Exec() rpc failed, so blacklist the executor.
+      Status retryable_status = Status::Expected(
+          TErrorCode::RETRYABLE_ERROR,
+          Substitute("ExecFInstances RPC to $0 failed",
+              TNetworkAddressToString(backend_state->krpc_impalad_address())));
+      retryable_status.MergeStatus(backend_state->exec_rpc_status());
+
       const TBackendDescriptor& be_desc = backend_state->exec_params()->be_desc;
       ExecEnv::GetInstance()->cluster_membership_mgr()->BlacklistExecutor(
-          be_desc, backend_state->exec_rpc_status());
-      RetryQuery(backend_state->exec_rpc_status());
+          be_desc, retryable_status);
+      RetryQuery(retryable_status);
     }
     if (backend_state->rpc_latency() > max_latency) {
       // Find the backend that takes the most time to acknowledge to
@@ -967,7 +973,7 @@ Status Coordinator::UpdateBlacklistWithAuxErrorInfo(
         string dest_node_addr = NetworkAddressPBToString(dest_node);
         LOG(INFO) << "Blacklisting " << dest_node_addr << " because a RPC to it failed.";
 
-        Status retryable_status = Status(TErrorCode::RETRYABLE_ERROR,
+        Status retryable_status = Status::Expected(TErrorCode::RETRYABLE_ERROR,
             Substitute("RPC from $0 to $1 failed", src_node_addr, dest_node_addr));
         retryable_status.MergeStatus(status);
 

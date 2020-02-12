@@ -166,14 +166,15 @@ void ControlService::ExecQueryFInstances(const ExecQueryFInstancesRequestPB* req
 void ControlService::ReportExecStatus(const ReportExecStatusRequestPB* request,
     ReportExecStatusResponsePB* response, RpcContext* rpc_context) {
   const TUniqueId query_id = ProtoToQueryId(request->query_id());
-  shared_ptr<ClientRequestState> request_state =
-      ExecEnv::GetInstance()->impala_server()->GetQueryDriver(query_id)->GetClientRequestState(
-          query_id);
+  ClientRequestState* request_state = ExecEnv::GetInstance()
+                                          ->impala_server()
+                                          ->GetQueryDriver(query_id)
+                                          ->GetClientRequestState(query_id);
 
   // This failpoint is to allow jitter to be injected.
   DebugActionNoFail(FLAGS_debug_actions, "REPORT_EXEC_STATUS_DELAY");
 
-  if (request_state.get() == nullptr) {
+  if (request_state == nullptr) {
     // This is expected occasionally (since a report RPC might be in flight while
     // cancellation is happening). Return an error to the caller to get it to stop.
     const string& err = Substitute("ReportExecStatus(): Received report for unknown "
@@ -192,7 +193,7 @@ void ControlService::ReportExecStatus(const ReportExecStatusRequestPB* request,
   TRuntimeProfileForest thrift_profiles;
   if (LIKELY(request->has_thrift_profiles_sidecar_idx())) {
     const Status& profile_status =
-        GetProfile(*request, *request_state.get(), rpc_context, &thrift_profiles);
+        GetProfile(*request, *request_state, rpc_context, &thrift_profiles);
     if (UNLIKELY(!profile_status.ok())) {
       LOG(ERROR) << Substitute("ReportExecStatus(): Failed to deserialize profile "
           "for query ID $0: $1", PrintId(request_state->query_id()),

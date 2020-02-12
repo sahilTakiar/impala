@@ -91,8 +91,7 @@ static const string TABLES_WITH_MISSING_DISK_IDS_KEY = "Tables With Missing Disk
 ClientRequestState::ClientRequestState(
     const TQueryCtx& query_ctx, ExecEnv* exec_env, Frontend* frontend,
     ImpalaServer* server, shared_ptr<ImpalaServer::SessionState> session,
-    unique_ptr<TExecRequest> exec_request,
-    const shared_ptr<QueryDriver>& query_driver)
+    TExecRequest* exec_request, QueryDriver* query_driver)
   : query_ctx_(query_ctx),
     last_active_time_ms_(numeric_limits<int64_t>::max()),
     child_query_executor_(new ChildQueryExecutor),
@@ -104,7 +103,7 @@ ClientRequestState::ClientRequestState(
     frontend_profile_(RuntimeProfile::Create(&profile_pool_, "Frontend")),
     server_profile_(RuntimeProfile::Create(&profile_pool_, "ImpalaServer")),
     summary_profile_(RuntimeProfile::Create(&profile_pool_, "Summary")),
-    exec_request_(move(exec_request)),
+    exec_request_(exec_request),
     frontend_(frontend),
     parent_server_(server),
     start_time_us_(UnixMicros()),
@@ -1470,7 +1469,7 @@ bool ClientRequestState::GetDmlStats(TDmlResult* dml_result, Status* query_statu
 
 Status ClientRequestState::InitExecRequest(const TQueryCtx& query_ctx) {
   return UpdateQueryStatus(
-      exec_env_->frontend()->GetExecRequest(query_ctx, exec_request_.get()));
+      exec_env_->frontend()->GetExecRequest(query_ctx, exec_request_));
 }
 
 void ClientRequestState::WaitUntilRetried() {

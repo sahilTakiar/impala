@@ -621,9 +621,9 @@ Status ImpalaServer::GetRuntimeProfileOutput(const TUniqueId& query_id,
   DCHECK(output != nullptr);
   // Search for the query id in the active query map
   {
-    shared_ptr<ClientRequestState> request_state =
+    ClientRequestState* request_state =
         GetQueryDriver(query_id)->GetClientRequestState(query_id);
-    if (request_state.get() != nullptr) {
+    if (request_state != nullptr) {
       // For queries in INITIALIZED state, the profile information isn't populated yet.
       if (request_state->exec_state() == ClientRequestState::ExecState::INITIALIZED) {
         return Status::Expected("Query plan is not ready.");
@@ -689,7 +689,7 @@ Status ImpalaServer::GetExecSummary(const TUniqueId& query_id, const string& use
     TExecSummary* result) {
   // Search for the query id in the active query map.
   {
-    shared_ptr<ClientRequestState> request_state =
+    ClientRequestState* request_state =
         GetQueryDriver(query_id)->GetClientRequestState(query_id);
     if (request_state != nullptr) {
       lock_guard<mutex> l(*request_state->lock());
@@ -884,7 +884,7 @@ void ImpalaServer::AddPoolConfiguration(TQueryCtx* ctx,
 
 Status ImpalaServer::Execute(TQueryCtx* query_ctx,
     shared_ptr<SessionState> session_state,
-    shared_ptr<ClientRequestState>* request_state) {
+    ClientRequestState*& request_state) {
   PrepareQueryContext(query_ctx);
   ScopedThreadContext debug_ctx(GetThreadDebugInfo(), query_ctx->query_id);
   ImpaladMetrics::IMPALA_SERVER_NUM_QUERIES->Increment(1L);
@@ -898,7 +898,7 @@ Status ImpalaServer::Execute(TQueryCtx* query_ctx,
   Status status = ExecuteInternal(*query_ctx, session_state, &registered_request_state,
       request_state);
   if (!status.ok() && registered_request_state) {
-    discard_result(UnregisterQuery((*request_state)->query_id(), false, &status));
+    discard_result(UnregisterQuery(request_state->query_id(), false, &status));
   }
   return status;
 }
@@ -907,22 +907,21 @@ Status ImpalaServer::ExecuteInternal(
     const TQueryCtx& query_ctx,
     shared_ptr<SessionState> session_state,
     bool* registered_request_state,
-    shared_ptr<ClientRequestState>* request_state) {
+    ClientRequestState*& request_state) {
   DCHECK(session_state != nullptr);
   *registered_request_state = false;
 
   shared_ptr<QueryDriver> query_driver;
-  query_driver.reset(new QueryDriver(exec_env_, this, *request_state));
-  unique_ptr<TExecRequest> exec_request = make_unique<TExecRequest>();
-  request_state->reset(new ClientRequestState(query_ctx, exec_env_, exec_env_->frontend(),
-      this, session_state, move(exec_request), query_driver));
+  query_driver.reset(new QueryDriver(exec_env_, this));
+  query_driver->CreateClientRequestState(query_ctx, session_state, request_state);
+  DCHECK(request_state != nullptr);
 
-  (*request_state)->query_events()->MarkEvent("Query submitted");
+  request_state->query_events()->MarkEvent("Query submitted");
 
   {
     // Keep a lock on request_state so that registration and setting
     // result_metadata are atomic.
-    lock_guard<mutex> l(*(*request_state)->lock());
+    lock_guard<mutex> l(*request_state->lock());
 
     // register exec state as early as possible so that queries that
     // take a long time to plan show up, and to handle incoming status
@@ -948,23 +947,23 @@ Status ImpalaServer::ExecuteInternal(
 
     // Takes the TQueryCtx and calls into the frontend to initialize the TExecRequest for
     // this query.
-    RETURN_IF_ERROR((*request_state)->InitExecRequest(query_ctx));
+    RETURN_IF_ERROR(query_driver->RunFrontendPlanner(query_ctx));
 
-    const TExecRequest& result = (*request_state)->exec_request();
-    (*request_state)->query_events()->MarkEvent("Planning finished");
-    (*request_state)->set_user_profile_access(result.user_has_profile_access);
-    (*request_state)->summary_profile()->AddEventSequence(
+    const TExecRequest& result = request_state->exec_request();
+    request_state->query_events()->MarkEvent("Planning finished");
+    request_state->set_user_profile_access(result.user_has_profile_access);
+    request_state->summary_profile()->AddEventSequence(
         result.timeline.name, result.timeline);
-    (*request_state)->SetFrontendProfile(result.profile);
+    request_state->SetFrontendProfile(result.profile);
     if (result.__isset.result_set_metadata) {
-      (*request_state)->set_result_metadata(result.result_set_metadata);
+      request_state->set_result_metadata(result.result_set_metadata);
     }
   }
   VLOG(2) << "Execution request: "
-          << ThriftDebugString((*request_state)->exec_request());
+          << ThriftDebugString(request_state->exec_request());
 
   // start execution of query; also starts fragment status reports
-  RETURN_IF_ERROR((*request_state)->Exec());
+  RETURN_IF_ERROR(request_state->Exec());
   Status status = UpdateCatalogMetrics();
   if (!status.ok()) {
     VLOG_QUERY << "Couldn't update catalog metrics: " << status.GetDetail();
@@ -1028,7 +1027,7 @@ void ImpalaServer::PrepareQueryContext(const TNetworkAddress& backend_addr,
 }
 
 Status ImpalaServer::RegisterQuery(const TUniqueId& query_id,
-    shared_ptr<SessionState> session_state, const shared_ptr<QueryDriver>& query_driver) {
+    shared_ptr<SessionState> session_state, shared_ptr<QueryDriver> query_driver) {
   lock_guard<mutex> l2(session_state->lock);
   // The session wasn't expired at the time it was checked out and it isn't allowed to
   // expire while checked out, so it must not be expired.
@@ -1048,8 +1047,8 @@ Status ImpalaServer::RegisterQuery(const TUniqueId& query_id,
   return Status::OK();
 }
 
-Status ImpalaServer::SetQueryInflight(shared_ptr<SessionState> session_state,
-    const shared_ptr<ClientRequestState>& request_state) {
+Status ImpalaServer::SetQueryInflight(
+    shared_ptr<SessionState> session_state, ClientRequestState* request_state) {
   const TUniqueId& query_id = request_state->query_id();
   lock_guard<mutex> l(session_state->lock);
   // The session wasn't expired at the time it was checked out and it isn't allowed to
@@ -1108,8 +1107,7 @@ Status ImpalaServer::SetQueryInflight(shared_ptr<SessionState> session_state,
   return Status::OK();
 }
 
-void ImpalaServer::UpdateExecSummary(
-    std::shared_ptr<ClientRequestState> request_state) const {
+void ImpalaServer::UpdateExecSummary(ClientRequestState* request_state) const {
   DCHECK(request_state->GetCoordinator() != nullptr);
   TExecSummary t_exec_summary;
   request_state->GetCoordinator()->GetTExecSummary(&t_exec_summary);
@@ -1129,8 +1127,8 @@ Status ImpalaServer::UnregisterQuery(const TUniqueId& query_id, bool check_infli
   // Delete it from the client_request_state_map_.
   DCHECK_EQ(this, ExecEnv::GetInstance()->impala_server());
   shared_ptr<QueryDriver> query_driver;
-  shared_ptr<ClientRequestState> request_state;
   RETURN_IF_ERROR(DeleteQueryDriver(query_id, &query_driver));
+  ClientRequestState* request_state = query_driver->GetClientRequestState(query_id);
 
   // Close and delete the ClientRequestState.
   CloseClientRequestState(request_state);
@@ -1149,15 +1147,14 @@ void ImpalaServer::UnregisterQueryDiscardResult(
 Status ImpalaServer::DeleteQueryDriver(
     const TUniqueId& query_id, shared_ptr<QueryDriver>* query_driver) {
   RETURN_IF_ERROR(query_driver_map_.DeleteQueryDriver(query_id, query_driver));
-  shared_ptr<ClientRequestState> request_state = (*query_driver)->GetClientRequestState();
+  ClientRequestState* request_state = (*query_driver)->GetClientRequestState();
   if (request_state->WasRetried()) {
     RETURN_IF_ERROR(query_driver_map_.DeleteQueryDriver(request_state->retried_id()));
   }
   return Status::OK();
 }
 
-void ImpalaServer::CloseClientRequestState(
-    const std::shared_ptr<ClientRequestState>& request_state) {
+void ImpalaServer::CloseClientRequestState(ClientRequestState* request_state) {
   request_state->Done();
 
   int64_t duration_us = request_state->end_time_us() - request_state->start_time_us();
@@ -1251,11 +1248,12 @@ shared_ptr<QueryDriver> ImpalaServer::GetQueryDriver(const TUniqueId& query_id) 
   }
 }
 
-Status ImpalaServer::CancelInternal(const TUniqueId& query_id, bool check_inflight,
-    const Status* cause) {
+Status ImpalaServer::CancelInternal(
+    const TUniqueId& query_id, bool check_inflight, const Status* cause) {
   VLOG_QUERY << "Cancel(): query_id=" << PrintId(query_id);
-  shared_ptr<ClientRequestState> request_state =
-      GetQueryDriver(query_id)->GetClientRequestState();
+  DCHECK(GetQueryDriver(query_id) != nullptr)
+      << (cause == nullptr ? "" : cause->GetDetail());
+  ClientRequestState* request_state = GetQueryDriver(query_id)->GetClientRequestState();
   if (request_state == nullptr) {
     return Status::Expected("Invalid or unknown query handle");
   }
@@ -1430,44 +1428,45 @@ TQueryOptions ImpalaServer::SessionState::QueryOptions() {
 }
 
 void ImpalaServer::WaitForResults(const TUniqueId& query_id,
-    shared_ptr<ClientRequestState>* request_state, int64_t* block_on_wait_time_us,
+    ClientRequestState*& request_state, int64_t* block_on_wait_time_us,
     bool* timed_out) {
   // Make sure ClientRequestState::Wait() has completed before fetching rows. Wait()
   // ensures that rows are ready to be fetched (e.g., Wait() opens
   // ClientRequestState::output_exprs_, which are evaluated in
   // ClientRequestState::FetchRows() below).
   ClientRequestState::RetryState retry_state;
-  *request_state = GetQueryDriver(query_id)->GetClientRequestState();
+  request_state = GetQueryDriver(query_id)->GetClientRequestState();
   BlockOnWait(request_state, timed_out, block_on_wait_time_us);
 
   // After BlockOnWait returns, it is possible that the query did not time out, and that
   // it was instead retried. In that case, wait until the query has been successfully
   // retried and then call GetClientRequestState, which should now return the
   // ClientRequestState for the new query.
-  retry_state = (*request_state)->retry_state();
+  retry_state = request_state->retry_state();
   if (retry_state == ClientRequestState::RetryState::RETRYING
       || retry_state == ClientRequestState::RetryState::RETRIED) {
-    (*request_state)->WaitUntilRetried();
-    *request_state = GetQueryDriver(query_id)->GetClientRequestState();
+    request_state->WaitUntilRetried();
+    request_state = GetQueryDriver(query_id)->GetClientRequestState();
     // Call BlockOnWait and then DCHECK that the state is not RETRYING or RETRIED
     BlockOnWait(request_state, timed_out, block_on_wait_time_us);
-    retry_state = (*request_state)->retry_state();
+    retry_state = request_state->retry_state();
     DCHECK(retry_state != ClientRequestState::RetryState::RETRYING
-        && retry_state != ClientRequestState::RetryState::RETRIED);
+        && retry_state != ClientRequestState::RetryState::RETRIED)
+        << request_state->RetryStateToString(retry_state);
   }
 }
 
-void ImpalaServer::BlockOnWait(shared_ptr<ClientRequestState>* request_state,
+void ImpalaServer::BlockOnWait(ClientRequestState* request_state,
     bool* timed_out, int64_t* block_on_wait_time_us) {
-  int64_t fetch_rows_timeout_us = (*request_state)->fetch_rows_timeout_us();
+  int64_t fetch_rows_timeout_us = request_state->fetch_rows_timeout_us();
   *timed_out =
-      !(*request_state)->BlockOnWait(fetch_rows_timeout_us, block_on_wait_time_us);
+      !request_state->BlockOnWait(fetch_rows_timeout_us, block_on_wait_time_us);
 }
 
 void ImpalaServer::CancelFromThreadPool(uint32_t thread_id,
     const CancellationWork& cancellation_work) {
   const TUniqueId& query_id = cancellation_work.query_id();
-  shared_ptr<ClientRequestState> request_state =
+  ClientRequestState* request_state =
       GetQueryDriver(query_id)->GetClientRequestState(query_id);
   // Query was already unregistered.
   if (request_state == nullptr) {
@@ -2247,7 +2246,7 @@ void ImpalaServer::UnregisterSessionTimeout(int32_t session_timeout) {
         // 'queries_by_timestamp_' is stored in ascending order of deadline so we can
         // break out of the loop and sleep as soon as we see a deadline in the future.
         if (expiration_event->deadline > now) break;
-        shared_ptr<ClientRequestState> crs =
+        ClientRequestState* crs =
             GetQueryDriver(expiration_event->query_id)->GetClientRequestState();
         if (crs == nullptr || crs->is_expired()) {
           // Query was deleted or expired already from a previous expiration event.
@@ -2257,13 +2256,13 @@ void ImpalaServer::UnregisterSessionTimeout(int32_t session_timeout) {
 
         // Check for CPU and scanned bytes limits
         if (expiration_event->kind == ExpirationKind::RESOURCE_LIMIT) {
-          Status resource_status = CheckResourceLimits(crs.get());
+          Status resource_status = CheckResourceLimits(crs);
           if (resource_status.ok()) {
             queries_by_timestamp_.emplace(
                 ExpirationEvent{now + EXPIRATION_CHECK_INTERVAL_MS,
                     expiration_event->query_id, ExpirationKind::RESOURCE_LIMIT});
           } else {
-            ExpireQuery(crs.get(), resource_status);
+            ExpireQuery(crs, resource_status);
           }
           expiration_event = queries_by_timestamp_.erase(expiration_event);
           continue;
@@ -2274,7 +2273,7 @@ void ImpalaServer::UnregisterSessionTimeout(int32_t session_timeout) {
           int32_t exec_time_limit_s = crs->query_options().exec_time_limit_s;
           VLOG_QUERY << "Expiring query " << PrintId(expiration_event->query_id)
                      << " due to execution time limit of " << exec_time_limit_s << "s.";
-          ExpireQuery(crs.get(),
+          ExpireQuery(crs,
               Status::Expected(TErrorCode::EXEC_TIME_LIMIT_EXCEEDED,
                   PrintId(expiration_event->query_id),
                   PrettyPrinter::Print(exec_time_limit_s, TUnit::TIME_S)));
@@ -2315,7 +2314,7 @@ void ImpalaServer::UnregisterSessionTimeout(int32_t session_timeout) {
           VLOG_QUERY << "Expiring query due to client inactivity: "
                      << PrintId(expiration_event->query_id) << ", last activity was at: "
                      << ToStringFromUnixMillis(crs->last_active_ms());
-          ExpireQuery(crs.get(),
+          ExpireQuery(crs,
               Status::Expected(TErrorCode::INACTIVE_QUERY_EXPIRED,
                   PrintId(expiration_event->query_id),
                   PrettyPrinter::Print(idle_timeout_s, TUnit::TIME_S)));
@@ -2344,7 +2343,7 @@ void ImpalaServer::UnregisterSessionTimeout(int32_t session_timeout) {
     vector<CancellationWork> to_cancel;
     query_driver_map_.DoFuncForAllEntries(
         [&](const std::shared_ptr<QueryDriver>& query_driver) {
-          shared_ptr<ClientRequestState> request_state =
+          ClientRequestState* request_state =
               query_driver->GetClientRequestState();
           Coordinator* coord = request_state->GetCoordinator();
           if (coord != nullptr) {
@@ -2618,10 +2617,10 @@ void ImpalaServer::UpdateFilter(UpdateFilterResultPB* result,
     const UpdateFilterParamsPB& params, RpcContext* context) {
   DCHECK(params.has_query_id());
   DCHECK(params.has_filter_id());
-  shared_ptr<ClientRequestState> client_request_state =
+  ClientRequestState* client_request_state =
       GetQueryDriver(ProtoToQueryId(params.query_id()))
           ->GetClientRequestState(ProtoToQueryId(params.query_id()));
-  if (client_request_state.get() == nullptr) {
+  if (client_request_state == nullptr) {
     LOG(INFO) << "Could not find client request state: "
               << PrintId(ProtoToQueryId(params.query_id()));
     return;
