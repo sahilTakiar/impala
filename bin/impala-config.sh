@@ -242,6 +242,7 @@ if $USE_CDP_HIVE; then
   export IMPALA_TEZ_VERSION=${CDP_TEZ_VERSION}
   export IMPALA_TEZ_URL=${CDP_TEZ_URL-}
   export IMPALA_KNOX_VERSION=${CDP_KNOX_VERSION}
+  export IMPALA_OZONE_VERSION=${CDP_OZONE_VERSION}
   export HADOOP_HOME="$CDP_COMPONENTS_HOME/hadoop-${IMPALA_HADOOP_VERSION}/"
 else
   # CDH hive version is used to build and deploy in minicluster when USE_CDP_HIVE is

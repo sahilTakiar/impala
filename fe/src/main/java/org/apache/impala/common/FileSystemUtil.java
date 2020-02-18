@@ -32,6 +32,7 @@ import org.apache.hadoop.fs.adl.AdlFileSystem;
 import org.apache.hadoop.fs.azurebfs.AzureBlobFileSystem;
 import org.apache.hadoop.fs.azurebfs.SecureAzureBlobFileSystem;
 import org.apache.hadoop.fs.s3a.S3AFileSystem;
+import org.apache.hadoop.fs.ozone.OzoneFileSystem;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.client.HdfsAdmin;
 import org.apache.hadoop.hdfs.protocol.EncryptionZone;
@@ -307,7 +308,7 @@ public class FileSystemUtil {
    */
   public static boolean supportsStorageIds(FileSystem fs) {
     // Common case.
-    if (isDistributedFileSystem(fs)) return true;
+    if (isDistributedFileSystem(fs) || isOzoneFileSystem(fs)) return true;
     // Blacklist FileSystems that are known to not to include storage UUIDs.
     return !(fs instanceof S3AFileSystem || fs instanceof LocalFileSystem ||
         fs instanceof AzureBlobFileSystem || fs instanceof SecureAzureBlobFileSystem ||
@@ -390,6 +391,14 @@ public class FileSystemUtil {
     return isDistributedFileSystem(path.getFileSystem(CONF));
   }
 
+  public static boolean isOzoneFileSystem(FileSystem fs) {
+    return fs instanceof OzoneFileSystem;
+  }
+
+  public static boolean isOzoneFileSystem(Path path) throws IOException {
+    return isOzoneFileSystem(path.getFileSystem(CONF));
+  }
+
   /**
    * Represents the type of filesystem being used. Typically associated with a
    * {@link org.apache.hadoop.fs.FileSystem} instance that is used to read data.
@@ -406,7 +415,8 @@ public class FileSystemUtil {
     ADLS,
     HDFS,
     LOCAL,
-    S3;
+    S3,
+    OZONE;
 
     private static final Map<String, FsType> SCHEME_TO_FS_MAPPING =
         ImmutableMap.<String, FsType>builder()
@@ -416,6 +426,7 @@ public class FileSystemUtil {
             .put("file", LOCAL)
             .put("hdfs", HDFS)
             .put("s3a", S3)
+            .put("o3fs", OZONE)
             .build();
 
     /**
@@ -531,7 +542,8 @@ public class FileSystemUtil {
         FileSystemUtil.isLocalFileSystem(path) ||
         FileSystemUtil.isS3AFileSystem(path) ||
         FileSystemUtil.isABFSFileSystem(path) ||
-        FileSystemUtil.isADLFileSystem(path));
+        FileSystemUtil.isADLFileSystem(path) ||
+        FileSystemUtil.isOzoneFileSystem(path));
   }
 
   /**
