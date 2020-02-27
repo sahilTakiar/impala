@@ -89,6 +89,8 @@ CONFIG = {
   # This property can be used in tests to ascertain that this core-site.xml from
   # the classpath has been loaded. (Ex: TestRequestPoolService)
   'impala.core-site.overridden': 'true',
+
+  'fs.o3fs.impl': 'org.apache.hadoop.fs.ozone.OzoneFileSystem',
 }
 
 if target_filesystem == 's3':

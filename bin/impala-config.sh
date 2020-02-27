@@ -174,15 +174,16 @@ export CDH_HBASE_VERSION=2.1.0-cdh6.x-SNAPSHOT
 export CDH_HIVE_VERSION=2.1.1-cdh6.x-SNAPSHOT
 export CDH_SENTRY_VERSION=2.1.0-cdh6.x-SNAPSHOT
 
-export CDP_BUILD_NUMBER=1617729
+export CDP_BUILD_NUMBER=1941147
 export CDP_MAVEN_REPOSITORY=\
 "https://${IMPALA_TOOLCHAIN_HOST}/build/cdp_components/${CDP_BUILD_NUMBER}/maven"
-export CDP_HADOOP_VERSION=3.1.1.7.0.2.0-212
-export CDP_HBASE_VERSION=2.2.0.7.0.2.0-212
-export CDP_HIVE_VERSION=3.1.2000.7.0.2.0-212
-export CDP_RANGER_VERSION=2.0.0.7.0.2.0-212
-export CDP_TEZ_VERSION=0.9.1.7.0.2.0-212
-export CDP_KNOX_VERSION=1.3.0.7.0.2.0-212
+export CDP_HADOOP_VERSION=3.1.1.7.0.2.1-116
+export CDP_HBASE_VERSION=2.2.0.7.0.2.1-116
+export CDP_HIVE_VERSION=3.1.3000.7.0.2.1-116
+export CDP_RANGER_VERSION=2.0.0.7.0.2.1-116
+export CDP_TEZ_VERSION=0.9.1.7.0.2.1-116
+export CDP_KNOX_VERSION=1.3.0.7.0.2.1-116
+export CDP_OZONE_VERSION=0.4.0.7.0.2.1-116
 
 export IMPALA_PARQUET_VERSION=1.10.99-cdh6.x-SNAPSHOT
 export IMPALA_AVRO_JAVA_VERSION=1.8.2-cdh6.x-SNAPSHOT
@@ -369,6 +370,7 @@ ${IMPALA_HIVE_VERSION}"}
   export HIVE_METASTORE_THRIFT_DIR=$HIVE_SRC_DIR/standalone-metastore/src/main/thrift
   export TEZ_HOME="$CDP_COMPONENTS_HOME/tez-${IMPALA_TEZ_VERSION}-minimal"
   export HBASE_HOME="$CDP_COMPONENTS_HOME/hbase-${IMPALA_HBASE_VERSION}/"
+  export OZONE_HOME="$CDP_COMPONENTS_HOME/hadoop-ozone-${IMPALA_OZONE_VERSION}/ozone-${IMPALA_OZONE_VERSION}"
   # It is likely that devs will want to work with both the versions of metastore
   # if cdp hive is being used change the metastore db name, so we don't have to
   # format the metastore db everytime we switch between hive versions

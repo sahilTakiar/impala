@@ -621,7 +621,9 @@ def get_hadoop_downloads():
                             unpack_directory_tmpl="hive-${version}")
     tez = CdpComponent("tez", archive_basename_tmpl="tez-${version}-minimal",
                        makedir=True)
-    cluster_components.extend([hadoop, hbase, hive, hive_src, tez])
+    ozone = CdpComponent("ozone", archive_basename_tmpl="hadoop-ozone-${version}",
+                       makedir=True)
+    cluster_components.extend([hadoop, hbase, hive, hive_src, tez, ozone])
   else:
     cluster_components.extend(map(CdhComponent, ["hadoop", "hbase", "hive"]))
   # Sentry is always CDH

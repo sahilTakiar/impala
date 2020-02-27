@@ -123,6 +123,10 @@ if ${USE_CDP_HIVE} ; then
   done
 fi
 
+if ${USE_CDP_HIVE} ; then
+  export HADOOP_CLASSPATH=${HADOOP_CLASSPATH}:${OZONE_HOME}/share/ozone/lib/hadoop-ozone-filesystem-${IMPALA_OZONE_VERSION}.jar:${OZONE_HOME}/share/ozone/lib/hadoop-ozone-common-${IMPALA_OZONE_VERSION}.jar:${HADOOP_CLASSPATH}:${OZONE_HOME}/share/ozone/lib/hadoop-hdds-common-${IMPALA_OZONE_VERSION}.jar:${OZONE_HOME}/share/ozone/lib/hadoop-hdds-config-${IMPALA_OZONE_VERSION}.jar:${OZONE_HOME}/share/ozone/lib/hadoop-ozone-client-${IMPALA_OZONE_VERSION}.jar:${OZONE_HOME}/share/ozone/lib/ratis-*.jar:${OZONE_HOME}/share/ozone/lib/opentracing-*.jar:${OZONE_HOME}/share/ozone/lib/jaeger-*.jar:${OZONE_HOME}/share/ozone/lib/hadoop-hdds-*-${IMPALA_OZONE_VERSION}.jar:${OZONE_HOME}/share/ozone/lib/hadoop-ozone-*-${IMPALA_OZONE_VERSION}.jar
+fi
+
 # Add kudu-hive.jar to the Hive Metastore classpath, so that Kudu's HMS
 # plugin can be loaded.
 for file in ${IMPALA_KUDU_JAVA_HOME}/*kudu-hive*jar; do
