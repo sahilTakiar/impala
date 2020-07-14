@@ -16,13 +16,16 @@
 # under the License.
 
 import pytest
-import pexpect
-import os
 
+from multiprocessing.pool import ThreadPool
+from random import randint
+
+from tests.common.impala_test_suite import ImpalaTestSuite
 from tests.common.custom_cluster_test_suite import CustomClusterTestSuite
 from tests.common.test_vector import ImpalaTestVector
 from tests.common.test_dimensions import create_client_protocol_dimension
-from tests.shell.util import get_shell_cmd, get_impalad_port, spawn_shell
+from tests.shell.util import (get_shell_cmd, get_impalad_port, run_impala_shell_cmd,
+                              spawn_shell, wait_for_query_state)
 
 
 class TestShellInteractive(CustomClusterTestSuite):
@@ -54,3 +57,29 @@ class TestShellInteractive(CustomClusterTestSuite):
       proc.sendline("set live_progress=true;")
       proc.sendline("select 1;")
       proc.expect(expected_admission_status)
+
+  @pytest.mark.execute_serially
+  def test_query_retries(self):
+    """Tests transparent query retries via impala-shell. Validats that the output of the
+    'profile;' command in impala-shell prints out both the original and retried runtime
+    profiles."""
+    query_options = "set retry_failed_queries=true;"
+    query = "select count(*) from functional.alltypes where bool_col = sleep(50)"
+    vector = ImpalaTestVector([ImpalaTestVector.Value("protocol", "hs2")])
+    pool = ThreadPool(processes=1)
+    result_async = pool.apply_async(lambda: run_impala_shell_cmd(
+        vector, ['-q', query_options + query + "; profile", '-B']))
+    wait_for_query_state(vector, query, "RUNNING")
+    self.cluster.impalads[
+        randint(1, ImpalaTestSuite.get_impalad_cluster_size() - 1)].kill()
+
+    result = result_async.get().stdout.strip()
+    result_rows = result.split('\n')
+    assert len(result_rows) > 1
+    assert result_rows[0] == "3650"
+
+    assert "Query Runtime Profile:" in result, result
+    assert "Retry Status: RETRIED" in result, result
+    assert "Query State: FINISHED" in result, result
+    assert "Query State: EXCEPTION" in result, result
+    assert "Failed Query Runtime Profile(s):" in result, result

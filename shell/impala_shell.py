@@ -981,10 +981,18 @@ class ImpalaShell(cmd.Cmd, object):
     if flush:
       file_descriptor.flush()
 
-  def print_runtime_profile(self, profile, status=False):
+  def print_runtime_profile(self, profile, failed_profile, status=False):
+    print("printing profile|")
     if self.show_profiles or status:
-      if profile is not None:
+      if profile:
+        print("profile not None, printing")
         print("Query Runtime Profile:\n" + profile)
+        print("printed profile")
+        print("failed profile = " + str(failed_profile))
+        if failed_profile:
+          print("pritning failed profile")
+          print("\nFailed Query Runtime Profile(s):\n" + failed_profile)
+          print("printed failed profile")
 
   def _parse_table_name_arg(self, arg):
     """ Parses an argument string and returns the result as a db name, table name combo.
@@ -1033,8 +1041,9 @@ class ImpalaShell(cmd.Cmd, object):
     elif self.last_query_handle is None:
       print('No previous query available to profile', file=sys.stderr)
       return CmdStatus.ERROR
-    profile = self.imp_client.get_runtime_profile(self.last_query_handle)
-    return self.print_runtime_profile(profile, True)
+    profile, failed_profile = self.imp_client.get_runtime_profile(
+        self.last_query_handle)
+    return self.print_runtime_profile(profile, failed_profile, True)
 
   def do_select(self, args):
     """Executes a SELECT... query, fetching all rows"""
@@ -1211,8 +1220,9 @@ class ImpalaShell(cmd.Cmd, object):
       if not is_dml:
         self.imp_client.close_query(self.last_query_handle)
       try:
-        profile = self.imp_client.get_runtime_profile(self.last_query_handle)
-        self.print_runtime_profile(profile)
+        profile, retried_profile = self.imp_client.get_runtime_profile(
+            self.last_query_handle)
+        self.print_runtime_profile(profile, retried_profile)
       except RPCException as e:
         if self.show_profiles: raise e
       return CmdStatus.SUCCESS

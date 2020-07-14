@@ -1022,6 +1022,24 @@ void ImpalaServer::GetExecSummary(TGetExecSummaryResp& return_val,
   return_val.status.__set_statusCode(thrift::TStatusCode::SUCCESS_STATUS);
 }
 
+void ImpalaServer::StringProfileToJSONProfile(
+    stringstream* string_profile, rapidjson::Document* json_profile) {
+  // Serialize to JSON without extra whitespace/formatting.
+  DCHECK(string_profile != nullptr);
+  DCHECK(json_profile != nullptr);
+  rapidjson::StringBuffer sb;
+  rapidjson::Writer<rapidjson::StringBuffer> writer(sb);
+  json_profile->Accept(writer);
+  *string_profile << sb.GetString();
+}
+
+void SetFailedStringProfile(stringstream* ss, TGetRuntimeProfileResp& return_val) {
+  vector<string> original_profiles;
+  original_profiles.emplace_back(ss->str());
+  return_val.__set_failed_profiles(original_profiles);
+  return_val.__isset.failed_profiles = true;
+}
+
 void ImpalaServer::GetRuntimeProfile(
     TGetRuntimeProfileResp& return_val, const TGetRuntimeProfileReq& request) {
   TUniqueId session_id;
@@ -1045,36 +1063,66 @@ void ImpalaServer::GetRuntimeProfile(
       SQLSTATE_GENERAL_ERROR);
 
   VLOG_RPC << "GetRuntimeProfile(): query_id=" << PrintId(query_id);
+  // TODO revise comments
+  // Set the RuntimeProfileOutput for the retried query (e.g. the second attempt of a
+  // query). If the query has been retried this will be the retried profile. If the
+  // query has not been retried then all entries will be nullptr.
+  RuntimeProfileOutput active_profile;
+  stringstream active_ss;
+  TRuntimeProfileTree active_thrift_profile;
+  rapidjson::Document active_json_profile(rapidjson::kObjectType);
+  active_profile.string_output = &active_ss;
+  active_profile.thrift_output = &active_thrift_profile;
+  active_profile.json_output = &active_json_profile;
 
+  // TODO call this the failed profile?
+  // Set the RuntimeProfileOutput for the original query (e.g. the first attempt of a
+  // query). If the query has been retried this will be the original profile (the
+  // profile of the original query attempt). If the query has not been retried then this will be the normal runtime profile.
+  RuntimeProfileOutput profile;
   stringstream ss;
   TRuntimeProfileTree thrift_profile;
   rapidjson::Document json_profile(rapidjson::kObjectType);
+  profile.string_output = &ss;
+  profile.thrift_output = &thrift_profile;
+  profile.json_output = &json_profile;
 
-  // If the query was retried, fetch the profile for the most recent attempt of the query
-  // The original query profile should still be accessible via the web ui.
-  QueryHandle query_handle;
-  Status status = GetActiveQueryHandle(query_id, &query_handle);
-  if (LIKELY(status.ok())) {
-    query_id = query_handle->query_id();
-  }
-
+  // Get the runtime profiles and load them into the given RuntimeProfileOutputs.
   HS2_RETURN_IF_ERROR(return_val,
-      GetRuntimeProfileOutput(query_id, GetEffectiveUser(*session), request.format, &ss,
-          &thrift_profile, &json_profile),
+      GetRuntimeProfileOutput(query_id, GetEffectiveUser(*session), request.format,
+                         &profile, &active_profile),
       SQLSTATE_GENERAL_ERROR);
+
+  // Set the Thrift response in TGetRuntimeProfileResp.
   if (request.format == TRuntimeProfileFormat::THRIFT) {
-    return_val.__set_thrift_profile(thrift_profile);
+    return_val.__set_thrift_profile(active_thrift_profile);
   } else if (request.format == TRuntimeProfileFormat::JSON) {
     // Serialize to JSON without extra whitespace/formatting.
-    rapidjson::StringBuffer sb;
-    rapidjson::Writer<rapidjson::StringBuffer> writer(sb);
-    json_profile.Accept(writer);
-    ss << sb.GetString();
-    return_val.__set_profile(ss.str());
+    StringProfileToJSONProfile(&active_ss, &active_json_profile);
+    return_val.__set_profile(active_ss.str());
   } else {
     DCHECK(request.format == TRuntimeProfileFormat::STRING
         || request.format == TRuntimeProfileFormat::BASE64);
-    return_val.__set_profile(ss.str());
+    return_val.__set_profile(active_ss.str());
+  }
+
+  // If 'request.include_query_attempts' include the retried profile in the Thrift
+  // response.
+  if (request.include_query_attempts) {
+    if (request.format == TRuntimeProfileFormat::THRIFT) {
+      vector<TRuntimeProfileTree> failed_thrift_profiles;
+      failed_thrift_profiles.emplace_back(thrift_profile);
+      return_val.__set_failed_thrift_profiles(failed_thrift_profiles);
+      return_val.__isset.failed_thrift_profiles = true;
+    } else if (request.format == TRuntimeProfileFormat::JSON) {
+      // TODO this does not make sense, where is json_profile set in the response?
+      StringProfileToJSONProfile(&ss, &json_profile);
+      SetFailedStringProfile(&ss, return_val);
+    } else {
+      DCHECK(request.format == TRuntimeProfileFormat::STRING
+          || request.format == TRuntimeProfileFormat::BASE64);
+      SetFailedStringProfile(&ss, return_val);
+    }
   }
   return_val.status.__set_statusCode(thrift::TStatusCode::SUCCESS_STATUS);
 }
